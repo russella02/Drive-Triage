@@ -40,6 +40,7 @@ test('HDD-01 is WATCH, health 90', () => {
   const spin = a.findings.find((f) => f.code === 'spin-retry');
   assert.equal(spin.severity, 'watch');
   assert.equal(spin.short, 'Spin retries 16');
+  assert.equal(a.findings.find((f) => f.code === 'selftest-interrupted').short, 'Self-test cut short');
   const notes = codes(a, 'note');
   ['model-warning', 'selftest-interrupted', 'sat12', 'temp-warm'].forEach((c) => assert.ok(notes.includes(c), c));
   assert.ok(!codes(a).includes('near-threshold'));

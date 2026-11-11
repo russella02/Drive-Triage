@@ -389,7 +389,7 @@
         'The connection saw ' + crc + ' data transfer error(s). That is usually a bad cable or port rather than the drive itself.');
     }
     if (outcomes.indexOf('interrupted') >= 0) {
-      add('note', 'selftest-interrupted', 'A self-test was cut short',
+      add('note', 'selftest-interrupted', 'Self-test cut short',
         'At least one self-test in the log was interrupted or aborted before it finished, so it tells us nothing about the drive.');
     }
     if (scan.satNeeds16) {
