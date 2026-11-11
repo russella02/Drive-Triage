@@ -264,3 +264,31 @@ test('every finding short is at most 24 characters and has a detail', () => {
     assert.ok(f.detail && f.detail.length > 10, f.code);
   });
 });
+
+test('when_failed now retires; past is a watch; past on temperature is a note', () => {
+  const now = assess(withAttr(clean(), 3, { when_failed: 'now' }));
+  assert.equal(now.verdict, 'retire');
+  assert.ok(now.health <= 10);
+  assert.ok(codes(now, 'retire').includes('failing-now'));
+
+  const past = assess(withAttr(clean(), 3, { when_failed: 'past' }));
+  assert.equal(past.verdict, 'watch');
+  assert.ok(!codes(past).includes('failing-now'));
+  const f = past.findings.find((x) => x.code === 'failed-past');
+  assert.equal(f.severity, 'watch');
+  assert.equal(f.short, 'Attr 3 failed in past');
+  assert.equal(past.health, 95);
+
+  const base = assess(clean());
+  const temp = assess(withAttr(clean(), 190, { when_failed: 'past' }));
+  assert.equal(temp.verdict, base.verdict);
+  assert.equal(temp.health, base.health);
+  assert.equal(temp.findings.find((x) => x.code === 'failed-past').severity, 'note');
+  assert.ok(!codes(temp, 'watch').includes('failed-past'));
+});
+
+test('failed-past deduction is capped at 10', () => {
+  let j = clean();
+  [3, 4, 12].forEach((id) => { j = withAttr(j, id, { when_failed: 'past' }); });
+  assert.equal(assess(j).health, 90);
+});

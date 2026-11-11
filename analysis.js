@@ -31,6 +31,7 @@
       spinRetry: 10,
       cmdTimeout: 5,
       grew: 15,
+      failedPastEach: 5, failedPastCap: 10,
       nearThresholdEach: 10, nearThresholdCap: 20,
       ageFreeHours: 20000, agePerHours: 3000, ageCap: 15,
       tempHot: 5,
@@ -261,7 +262,7 @@
       add('retire', 'smart-failed', 'SMART health FAILED',
         'The drive itself reports that its overall SMART health check has failed. Treat it as unreliable and do not trust it with data.');
     }
-    const failingNow = attrIds.map((id) => scan.attrs[id]).filter((a) => a.whenFailed && a.whenFailed !== '-');
+    const failingNow = attrIds.map((id) => scan.attrs[id]).filter((a) => a.whenFailed === 'now');
     if (failingNow.length) {
       hardFailure = true;
       add('retire', 'failing-now', 'Attribute failing now',
@@ -348,6 +349,16 @@
         near.map((a) => a.name || ('attribute ' + a.id)).join(', ')
         + (near.length === 1 ? ' has' : ' have') + ' almost used up the margin the maker allows before the drive counts as failing.');
     }
+    // "past": the normalized value touched its threshold once but is not failing now.
+    const failedPast = attrIds.map((id) => scan.attrs[id]).filter((a) => a.whenFailed === 'past');
+    const pastNonTemp = failedPast.filter((a) => RULES.nearThresholdSkipIds.indexOf(a.id) < 0);
+    failedPast.forEach((a) => {
+      const isTemp = RULES.nearThresholdSkipIds.indexOf(a.id) >= 0;
+      add(isTemp ? 'note' : 'watch', 'failed-past', 'Attr ' + a.id + ' failed in past',
+        (a.name || ('Attribute ' + a.id)) + ' dropped to its failure limit at some point in the past but is not failing now.'
+        + (isTemp ? ' Heat is judged separately.' : ' Keep an eye on whether it happens again.'));
+    });
+    if (pastNonTemp.length) deduction += Math.min(D.failedPastCap, pastNonTemp.length * D.failedPastEach);
     const t = scan.temp || {};
     const lifeHot = t.lifetimeMax !== null && t.lifetimeMax >= RULES.tempLifetimeWatch;
     const nowHot = t.current !== null && t.current >= RULES.tempCurrentWatch;
