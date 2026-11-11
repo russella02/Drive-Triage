@@ -222,9 +222,11 @@
   }
 
   // ----------------------------------------------------------------- assessDrive
-  function shortOf(s) {
-    s = String(s);
-    return s.length <= RULES.shortMax ? s : s.slice(0, RULES.shortMax);
+  // "prefix N" when it fits the sticker limit, otherwise the number-free fallback.
+  // A number is never cut short: a wrong count on a label is worse than no count.
+  function withNum(prefix, n, fallback) {
+    const s = prefix + ' ' + n;
+    return s.length <= RULES.shortMax ? s : fallback;
   }
 
   function years(hours) { return Math.round(hours / 8766 * 10) / 10; }
@@ -246,7 +248,7 @@
     let deduction = 0;
     let hardFailure = false; // SMART failed / attribute failing now / failed self-test
     function add(severity, code, short, detail) {
-      found[severity].push({ severity, code, short: shortOf(short), detail });
+      found[severity].push({ severity, code, short, detail });
     }
     const count = (id) => { const n = attrCount(scan, id); return n === null ? 0 : n; };
     const attrIds = Object.keys(scan.attrs).map(Number).sort((a, b) => a - b);
@@ -278,25 +280,25 @@
     const pending = count(197);
     if (pending > 0) {
       deduction += Math.min(D.pendingCap, pending * D.pendingEach);
-      add('retire', 'pending', 'Pending sectors ' + pending,
+      add('retire', 'pending', withNum('Pending sectors', pending, 'Pending sectors'),
         pending + ' sector(s) are waiting to be re-read or remapped. They could not be read reliably, so data stored there may already be damaged.');
     }
     const offline = count(198);
     if (offline > 0) {
       deduction += Math.min(D.offlineCap, offline * D.offlineEach);
-      add('retire', 'offline-unc', 'Offline uncorrectable ' + offline,
+      add('retire', 'offline-unc', withNum('Offline unc.', offline, 'Offline unc.'),
         offline + ' sector(s) could not be read even when the drive tested itself in the background. That data is likely lost.');
     }
     const reported = count(187);
     if (reported > 0) {
       deduction += Math.min(D.reportedCap, reported * D.reportedEach);
-      add('retire', 'reported-unc', 'Uncorrectable ' + reported,
+      add('retire', 'reported-unc', withNum('Uncorrectable', reported, 'Uncorrectable'),
         'The drive reported ' + reported + ' read error(s) it could not fix, so some data could not be returned to the computer.');
     }
     const realloc = count(5);
     if (realloc > 0) deduction += Math.min(D.reallocCap, Math.floor(realloc / D.reallocPerSectors));
     if (realloc > RULES.reallocRetire) {
-      add('retire', 'realloc-high', 'Reallocated ' + realloc,
+      add('retire', 'realloc-high', withNum('Reallocated', realloc, 'Reallocated'),
         'The drive has already swapped out ' + realloc + ' damaged sectors for spares. That many means the surface is deteriorating.');
     }
 
@@ -321,19 +323,19 @@
 
     // ---- WATCH
     if (realloc >= 1 && realloc <= RULES.reallocRetire) {
-      add('watch', 'realloc', 'Reallocated ' + realloc,
+      add('watch', 'realloc', withNum('Reallocated', realloc, 'Reallocated'),
         'The drive has swapped out ' + realloc + ' damaged sector(s) for spares. A few can be normal, but keep an eye on whether the number grows.');
     }
     const spin = count(10);
     if (spin > 0) {
       deduction += D.spinRetry;
-      add('watch', 'spin-retry', 'Spin retries ' + spin,
+      add('watch', 'spin-retry', withNum('Spin retries', spin, 'Spin retries'),
         'The drive needed ' + spin + ' extra attempt(s) to get its platters up to speed, which can point to a weakening motor or bearings.');
     }
     const timeouts = count(188);
     if (timeouts > RULES.cmdTimeoutWatch) {
       deduction += D.cmdTimeout;
-      add('watch', 'cmd-timeout', 'Command timeouts ' + timeouts,
+      add('watch', 'cmd-timeout', withNum('Cmd timeouts', timeouts, 'Cmd timeouts'),
         'The drive stopped responding to the computer ' + timeouts + ' times. This is often a power or cable fault but can be a failing drive.');
     }
     // Refined near-threshold rule: healthy Seagates sit at value 100 with thresholds 97/99, so a
@@ -378,7 +380,9 @@
         'The drive has been powered on for ' + hours.toLocaleString('en-US') + ' hours (about '
         + years(hours) + ' years of running). Drives this old fail more often.');
     }
-    if (!hasExtended) {
+    if (!hasExtended && tests.length === 0 && scan.satNeeds16) {
+      // empty log + sat,12 scan: the log may just be unreadable, so do not claim none was ever run
+    } else if (!hasExtended) {
       deduction += D.noLongTest;
       add('watch', 'no-long-test', 'No long self-test yet',
         'No extended (long) self-test appears in the log. That is the thorough surface check, so the drive has never been fully examined.');
@@ -396,7 +400,7 @@
     if (scan.warning) add('note', 'model-warning', 'Known model problem', scan.warning);
     const crc = count(199);
     if (crc > 0) {
-      add('note', 'crc', 'Cable errors ' + crc,
+      add('note', 'crc', withNum('Cable errors', crc, 'Cable errors'),
         'The connection saw ' + crc + ' data transfer error(s). That is usually a bad cable or port rather than the drive itself.');
     }
     if (outcomes.indexOf('interrupted') >= 0) {

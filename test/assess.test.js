@@ -292,3 +292,65 @@ test('failed-past deduction is capped at 10', () => {
   [3, 4, 12].forEach((id) => { j = withAttr(j, id, { when_failed: 'past' }); });
   assert.equal(assess(j).health, 90);
 });
+
+// Throws instead of truncating: a label over the limit is a bug in the rule, not something to cut.
+function assertShortOk(f, mustContain) {
+  assert.ok(f.short.length <= 24, f.code + ' too long: ' + f.short);
+  if (mustContain !== undefined) {
+    assert.ok(f.short.includes(String(mustContain)) || !/\d/.test(f.short),
+      f.code + ' prints a wrong number: ' + f.short);
+  }
+}
+
+test('numeric labels never print a truncated number (6-digit counts)', () => {
+  const N = 999999;
+  const cases = [
+    [197, 'pending', N], [198, 'offline-unc', N], [187, 'reported-unc', N],
+    [5, 'realloc-high', N], [10, 'spin-retry', N], [199, 'crc', N], [188, 'cmd-timeout', 65535]
+  ];
+  cases.forEach(([id, code, n]) => {
+    const a = assess(withAttr(clean(), id, { raw: { value: n, string: String(n) } }));
+    const f = a.findings.find((x) => x.code === code);
+    assert.ok(f, code);
+    assertShortOk(f, n);
+    assert.ok(f.short.includes(String(n)), code + ' should fit the full number: ' + f.short);
+  });
+  [5, 197, 198, 187].forEach((id) => {
+    const a = twoScans(
+      (j) => withAttr(j, id, { raw: { value: 0, string: '0' } }),
+      (j) => withAttr(j, id, { raw: { value: N, string: String(N) } })
+    );
+    const f = a.findings.find((x) => x.code === 'grew');
+    assertShortOk(f, N);
+  });
+  // a count too large for any label drops the number instead of cutting it
+  const big = assess(withAttr(clean(), 198, { raw: { value: 123456789012, string: 'x' } }));
+  const f = big.findings.find((x) => x.code === 'offline-unc');
+  assertShortOk(f, 123456789012);
+});
+
+test('empty self-test log on a sat,12 scan does not claim no long test', () => {
+  const j = clean();
+  j.ata_smart_self_test_log.standard.table = [];
+  const a = assess(j);
+  assert.ok(a.findings.some((f) => f.code === 'sat12'));
+  assert.ok(!codes(a).includes('no-long-test'));
+  assert.equal(a.health, 100);
+  // with the full command mode, an empty log really means no test
+  const k = clean();
+  k.ata_smart_self_test_log.standard.table = [];
+  k.smartctl.output = k.smartctl.output.filter((l) => l.indexOf('require SAT ATA PASS-THROUGH (16)') < 0);
+  const b = assess(k);
+  assert.ok(codes(b).includes('no-long-test'));
+});
+
+test('temp-warm is absent when temp-hot fires', () => {
+  const j = clean(); j.temperature.lifetime_max = 56;
+  const a = assess(j);
+  assert.ok(codes(a).includes('temp-hot'));
+  assert.ok(!codes(a).includes('temp-warm'));
+  const k = clean(); k.temperature.lifetime_max = 52; k.temperature.current = 50;
+  const b = assess(k);
+  assert.ok(codes(b).includes('temp-hot'));
+  assert.ok(!codes(b).includes('temp-warm'));
+});
