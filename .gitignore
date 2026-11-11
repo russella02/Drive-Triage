@@ -1,0 +1,11 @@
+# Local tooling workspaces
+.superpowers/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
