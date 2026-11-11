@@ -427,6 +427,39 @@
     return { verdict, health, band, findings };
   }
 
-  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive };
+  // ---------------------------------------------------------------- analyzeFiles
+  // files: [{ relPath, text }] read from the chosen folder (untrusted text).
+  // Returns drives worst first, the number of unique scans (serial + model + time), and how many
+  // files were skipped because they were not JSON or not a smartctl scan.
+  const VERDICT_ORDER = { retire: 0, watch: 1, keep: 2, unsupported: 3 };
+
+  function analyzeFiles(files) {
+    const scans = [];
+    let skipped = 0;
+    (files || []).forEach((f) => {
+      let json;
+      try {
+        json = JSON.parse(String(f.text).replace(/^﻿/, ''));
+      } catch (e) {
+        skipped++;
+        return;
+      }
+      const s = parseScan(json, f.relPath);
+      if (!s) { skipped++; return; }
+      scans.push(s);
+    });
+    // groupDrives already keeps one scan per serial + model + time.
+    const drives = groupDrives(scans).map((drive) => ({ drive, assessment: assessDrive(drive) }));
+    const scanCount = drives.reduce((n, e) => n + e.drive.scans.length, 0);
+    const health = (e) => (e.assessment.health === null ? 101 : e.assessment.health);
+    drives.sort((a, b) =>
+      (VERDICT_ORDER[a.assessment.verdict] - VERDICT_ORDER[b.assessment.verdict])
+      || (health(a) - health(b))
+      || String(a.drive.name).localeCompare(String(b.drive.name), 'en', { numeric: true })
+      || (a.drive.key < b.drive.key ? -1 : a.drive.key > b.drive.key ? 1 : 0));
+    return { drives, scanCount, skipped };
+  }
+
+  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive, analyzeFiles };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else window.SmartAnalysis = api;
 })();
