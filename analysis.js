@@ -8,6 +8,40 @@
  * and are never used for judgement; attrCount() decodes the ones that are usable.
  */
 (function () {
+  // ------------------------------------------------------------------- RULES
+  // Every threshold from the spec lives here so it is easy to tune.
+  const RULES = {
+    reallocRetire: 100,          // attr 5 above this retires; 1..this is a watch
+    cmdTimeoutWatch: 5,          // attr 188 (decoded) above this is a watch
+    nearThresholdGap: 10,        // normalized value within this of a (non-zero) threshold
+    nearThresholdMaxValue: 100,  // ...and strictly below this (healthy drives sit at 100)
+    nearThresholdSkipIds: [190, 194],
+    tempLifetimeWatch: 55,
+    tempCurrentWatch: 50,
+    tempLifetimeNote: 50,
+    oldHours: 50000,
+    staleLongTestHours: 168,
+    growthAttrs: [5, 197, 198, 187],
+    shortMax: 24,                // sticker label length limit
+    deduct: {
+      reallocPerSectors: 2, reallocCap: 40,
+      pendingEach: 10, pendingCap: 50,
+      offlineEach: 10, offlineCap: 50,
+      reportedEach: 5, reportedCap: 40,
+      spinRetry: 10,
+      cmdTimeout: 5,
+      grew: 15,
+      nearThresholdEach: 10, nearThresholdCap: 20,
+      ageFreeHours: 20000, agePerHours: 3000, ageCap: 15,
+      tempHot: 5,
+      noLongTest: 5
+    },
+    retireMaxScore: 39,
+    failureMaxScore: 10,
+    bandGood: 80,
+    bandFair: 50
+  };
+
   // ---------------------------------------------------------------- helpers
   function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
   function num(x) { return typeof x === 'number' && isFinite(x) ? x : null; }
@@ -139,6 +173,7 @@
   }
 
   function selfTestOutcome(statusValue) {
+    if (num(statusValue) === null) return 'unknown'; // missing status: neither a pass nor a failure
     const n = statusValue >> 4;
     if (n === 0) return 'pass';
     if (n === 1 || n === 2) return 'interrupted';
@@ -185,6 +220,198 @@
     return drives.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
-  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives };
+  // ----------------------------------------------------------------- assessDrive
+  function shortOf(s) {
+    s = String(s);
+    return s.length <= RULES.shortMax ? s : s.slice(0, RULES.shortMax);
+  }
+
+  function years(hours) { return Math.round(hours / 8766 * 10) / 10; }
+
+  function assessDrive(drive) {
+    const scan = drive.latest;
+    if (!scan.supported) {
+      return {
+        verdict: 'unsupported', health: null, band: null,
+        findings: [{
+          severity: 'note', code: 'unsupported', short: 'Not supported yet',
+          detail: 'This scan is not from a SATA/ATA drive with a SMART attribute table, so this app cannot judge it yet.'
+        }]
+      };
+    }
+
+    const D = RULES.deduct;
+    const found = { retire: [], watch: [], note: [] }; // each list keeps rule order
+    let deduction = 0;
+    let hardFailure = false; // SMART failed / attribute failing now / failed self-test
+    function add(severity, code, short, detail) {
+      found[severity].push({ severity, code, short: shortOf(short), detail });
+    }
+    const count = (id) => { const n = attrCount(scan, id); return n === null ? 0 : n; };
+    const attrIds = Object.keys(scan.attrs).map(Number).sort((a, b) => a - b);
+
+    const tests = scan.selfTests || [];
+    const isExtended = (x) => /extended/i.test(String(x.type || ''));
+    const outcomes = tests.map((x) => selfTestOutcome(x.statusValue));
+    const hasExtended = tests.some(isExtended);
+
+    // ---- RETIRE
+    if (scan.smartPassed === false) {
+      hardFailure = true;
+      add('retire', 'smart-failed', 'SMART health FAILED',
+        'The drive itself reports that its overall SMART health check has failed. Treat it as unreliable and do not trust it with data.');
+    }
+    const failingNow = attrIds.map((id) => scan.attrs[id]).filter((a) => a.whenFailed && a.whenFailed !== '-');
+    if (failingNow.length) {
+      hardFailure = true;
+      add('retire', 'failing-now', 'Attribute failing now',
+        'The drive flags ' + failingNow.map((a) => a.name || ('attribute ' + a.id)).join(', ')
+        + ' as having failed its limit. That is the drive warning that it is wearing out.');
+    }
+    if (outcomes.length && outcomes[0] === 'fail') {
+      hardFailure = true;
+      add('retire', 'selftest-failed', 'Last self-test failed',
+        'The most recent self-test ended in an error (' + (tests[0].statusString || 'unknown error')
+        + '). The drive found a fault when it tested itself.');
+    }
+    const pending = count(197);
+    if (pending > 0) {
+      deduction += Math.min(D.pendingCap, pending * D.pendingEach);
+      add('retire', 'pending', 'Pending sectors ' + pending,
+        pending + ' sector(s) are waiting to be re-read or remapped. They could not be read reliably, so data stored there may already be damaged.');
+    }
+    const offline = count(198);
+    if (offline > 0) {
+      deduction += Math.min(D.offlineCap, offline * D.offlineEach);
+      add('retire', 'offline-unc', 'Offline uncorrectable ' + offline,
+        offline + ' sector(s) could not be read even when the drive tested itself in the background. That data is likely lost.');
+    }
+    const reported = count(187);
+    if (reported > 0) {
+      deduction += Math.min(D.reportedCap, reported * D.reportedEach);
+      add('retire', 'reported-unc', 'Uncorrectable ' + reported,
+        'The drive reported ' + reported + ' read error(s) it could not fix, so some data could not be returned to the computer.');
+    }
+    const realloc = count(5);
+    if (realloc > 0) deduction += Math.min(D.reallocCap, Math.floor(realloc / D.reallocPerSectors));
+    if (realloc > RULES.reallocRetire) {
+      add('retire', 'realloc-high', 'Reallocated ' + realloc,
+        'The drive has already swapped out ' + realloc + ' damaged sectors for spares. That many means the surface is deteriorating.');
+    }
+
+    const prev = drive.previous;
+    if (prev && prev.supported) {
+      const labels = { 5: 'Realloc', 197: 'Pending', 198: 'Offline', 187: 'Uncorrect' };
+      let grew = false;
+      RULES.growthAttrs.forEach((id) => {
+        const a = attrCount(prev, id);
+        const b = attrCount(scan, id);
+        if (a === null || b === null || b <= a) return;
+        grew = true;
+        let s = labels[id] + ' ' + a + '→' + b + ' since last';
+        if (s.length > RULES.shortMax) s = labels[id] + ' +' + (b - a) + ' since last';
+        if (s.length > RULES.shortMax) s = labels[id] + ' grew';
+        add('retire', 'grew', s,
+          'The bad-sector count for ' + labels[id].toLowerCase() + ' went from ' + a + ' to ' + b
+          + ' since the previous scan. A count that keeps climbing means the drive is actively getting worse.');
+      });
+      if (grew) deduction += D.grew;
+    }
+
+    // ---- WATCH
+    if (realloc >= 1 && realloc <= RULES.reallocRetire) {
+      add('watch', 'realloc', 'Reallocated ' + realloc,
+        'The drive has swapped out ' + realloc + ' damaged sector(s) for spares. A few can be normal, but keep an eye on whether the number grows.');
+    }
+    const spin = count(10);
+    if (spin > 0) {
+      deduction += D.spinRetry;
+      add('watch', 'spin-retry', 'Spin retries ' + spin,
+        'The drive needed ' + spin + ' extra attempt(s) to get its platters up to speed, which can point to a weakening motor or bearings.');
+    }
+    const timeouts = count(188);
+    if (timeouts > RULES.cmdTimeoutWatch) {
+      deduction += D.cmdTimeout;
+      add('watch', 'cmd-timeout', 'Command timeouts ' + timeouts,
+        'The drive stopped responding to the computer ' + timeouts + ' times. This is often a power or cable fault but can be a failing drive.');
+    }
+    // Refined near-threshold rule: healthy Seagates sit at value 100 with thresholds 97/99, so a
+    // value of 100 never counts; temperature attributes are judged separately.
+    const near = attrIds.map((id) => scan.attrs[id]).filter((a) =>
+      RULES.nearThresholdSkipIds.indexOf(a.id) < 0
+      && a.thresh > 0 && a.value > a.thresh
+      && a.value - a.thresh <= RULES.nearThresholdGap
+      && a.value < RULES.nearThresholdMaxValue);
+    if (near.length) {
+      deduction += Math.min(D.nearThresholdCap, near.length * D.nearThresholdEach);
+      add('watch', 'near-threshold', near.length === 1 ? 'Near its limit' : near.length + ' attributes near limit',
+        near.map((a) => a.name || ('attribute ' + a.id)).join(', ')
+        + (near.length === 1 ? ' has' : ' have') + ' almost used up the margin the maker allows before the drive counts as failing.');
+    }
+    const t = scan.temp || {};
+    const lifeHot = t.lifetimeMax !== null && t.lifetimeMax >= RULES.tempLifetimeWatch;
+    const nowHot = t.current !== null && t.current >= RULES.tempCurrentWatch;
+    if (lifeHot || nowHot) {
+      if (lifeHot) deduction += D.tempHot;
+      add('watch', 'temp-hot', 'Runs hot',
+        'The drive has reached ' + (lifeHot ? t.lifetimeMax : t.current) + ' °C'
+        + (nowHot ? ' and is currently at ' + t.current + ' °C' : '')
+        + '. Heat shortens a drive’s life.');
+    }
+    const hours = scan.powerOnHours;
+    if (hours !== null && hours > D.ageFreeHours) {
+      deduction += Math.min(D.ageCap, Math.floor((hours - D.ageFreeHours) / D.agePerHours));
+    }
+    if (hours !== null && hours >= RULES.oldHours) {
+      add('watch', 'old', 'Old: ' + years(hours) + ' years on',
+        'The drive has been powered on for ' + hours.toLocaleString('en-US') + ' hours (about '
+        + years(hours) + ' years of running). Drives this old fail more often.');
+    }
+    if (!hasExtended) {
+      deduction += D.noLongTest;
+      add('watch', 'no-long-test', 'No long self-test yet',
+        'No extended (long) self-test appears in the log. That is the thorough surface check, so the drive has never been fully examined.');
+    } else if (hours !== null) {
+      // newest extended test that passed; an unknown or failed one does not count
+      const i = tests.findIndex((x, k) => isExtended(x) && outcomes[k] === 'pass' && typeof x.hours === 'number');
+      if (i >= 0 && hours - tests[i].hours > RULES.staleLongTestHours) {
+        add('watch', 'stale-long-test', 'Long test is out of date',
+          'The last passing extended self-test was ' + (hours - tests[i].hours).toLocaleString('en-US')
+          + ' power-on hours before this scan, so recent wear has not been checked. Run a new one.');
+      }
+    }
+
+    // ---- NOTE
+    if (scan.warning) add('note', 'model-warning', 'Known model problem', scan.warning);
+    const crc = count(199);
+    if (crc > 0) {
+      add('note', 'crc', 'Cable errors ' + crc,
+        'The connection saw ' + crc + ' data transfer error(s). That is usually a bad cable or port rather than the drive itself.');
+    }
+    if (outcomes.indexOf('interrupted') >= 0) {
+      add('note', 'selftest-interrupted', 'A self-test was cut short',
+        'At least one self-test in the log was interrupted or aborted before it finished, so it tells us nothing about the drive.');
+    }
+    if (scan.satNeeds16) {
+      add('note', 'sat12', 'Re-scan with sat,16',
+        'This scan used a 12-byte USB command mode and could not read every log. Scanning again with -d sat,16 may show more.');
+    }
+    if (!lifeHot && !nowHot && t.lifetimeMax !== null && t.lifetimeMax >= RULES.tempLifetimeNote) {
+      add('note', 'temp-warm', 'Got warm: ' + t.lifetimeMax + ' °C',
+        'The drive has reached ' + t.lifetimeMax + ' °C at some point. That is warm but not yet harmful; check airflow.');
+    }
+
+    const findings = found.retire.concat(found.watch, found.note);
+    const verdict = found.retire.length ? 'retire' : found.watch.length ? 'watch' : 'keep';
+
+    let health = 100 - deduction;
+    if (verdict === 'retire') health = Math.min(health, RULES.retireMaxScore);
+    if (hardFailure) health = Math.min(health, RULES.failureMaxScore);
+    health = Math.max(0, Math.floor(health));
+    const band = health >= RULES.bandGood ? 'good' : health >= RULES.bandFair ? 'fair' : 'poor';
+    return { verdict, health, band, findings };
+  }
+
+  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else window.SmartAnalysis = api;
 })();
