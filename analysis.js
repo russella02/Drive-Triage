@@ -48,15 +48,45 @@
   function num(x) { return typeof x === 'number' && isFinite(x) ? x : null; }
 
   // ------------------------------------------------------------ parse pieces
+  // Known brands: family keyword, display name, model prefixes that already name the brand.
+  const BRANDS = [
+    [/western digital|WDC?/i, 'Western Digital', ['WDC', 'WD']],
+    [/seagate/i, 'Seagate', ['SEAGATE']],
+    [/toshiba/i, 'Toshiba', ['TOSHIBA']],
+    [/hitachi/i, 'Hitachi', ['HITACHI']],
+    [/hgst/i, 'HGST', ['HGST']],
+    [/samsung/i, 'Samsung', ['SAMSUNG']],
+    [/fujitsu/i, 'Fujitsu', ['FUJITSU']],
+    [/maxtor/i, 'Maxtor', ['MAXTOR']],
+    [/intel/i, 'Intel', ['INTEL']],
+    [/crucial/i, 'Crucial', ['CRUCIAL']],
+    [/kingston/i, 'Kingston', ['KINGSTON']],
+    [/sandisk/i, 'SanDisk', ['SANDISK']],
+    [/micron/i, 'Micron', ['MICRON']]
+  ];
+  // Model-prefix fallbacks, tried in order (when the family names no known brand).
+  const PREFIX_VENDORS = [
+    ['ST', 'Seagate'], ['WDC', 'Western Digital'], ['WD', 'Western Digital'],
+    ['HGST', 'HGST'], ['HUS', 'HGST'], ['HDS', 'HGST'], ['HTS', 'HGST'],
+    ['TOSHIBA', 'Toshiba'], ['DT', 'Toshiba'], ['MG', 'Toshiba'], ['MQ', 'Toshiba'],
+    ['SAMSUNG', 'Samsung'], ['HD', 'Samsung']
+  ];
+
   function vendorOf(family, model) {
-    if (typeof family === 'string' && family.trim()) return family.trim().split(/\s+/)[0];
+    const f = typeof family === 'string' ? family : '';
+    const hit = BRANDS.find((b) => b[0].test(f));
+    if (hit) return hit[1];
     const m = String(model || '').trim().toUpperCase();
-    if (m.startsWith('ST')) return 'Seagate';
-    if (m.startsWith('WDC') || m.startsWith('WD')) return 'Western Digital';
-    if (m.startsWith('HGST') || m.startsWith('HUS') || m.startsWith('HDS')) return 'HGST';
-    if (m.startsWith('TOSHIBA') || m.startsWith('DT') || m.startsWith('MG')) return 'Toshiba';
-    if (m.startsWith('SAMSUNG') || m.startsWith('HD')) return 'Samsung';
-    return '';
+    const p = PREFIX_VENDORS.find((x) => m.startsWith(x[0]));
+    return p ? p[1] : '';
+  }
+
+  // Does the model string already name its vendor (by name or a known model prefix)?
+  function modelNamesVendor(model, vendor) {
+    const m = String(model || '').trim().toUpperCase();
+    if (m.startsWith(String(vendor).toUpperCase())) return true;
+    const b = BRANDS.find((x) => x[1] === vendor);
+    return !!b && b[2].some((p) => m.startsWith(p));
   }
 
   function driveNameOf(relPath, model, serial) {
@@ -201,7 +231,7 @@
 
     const model = String(scan.model || '').trim();
     const vendor = String(scan.vendor || '').trim();
-    const head = vendor && model.toLowerCase().indexOf(vendor.toLowerCase()) !== 0 ? vendor + ' ' + model : model;
+    const head = vendor && !modelNamesVendor(model, vendor) ? vendor + ' ' + model : model;
     const cap = formatCapacity(scan.capacityBytes);
     const line2 = (head + (cap ? '  ' + cap : '')).trim() || 'Unknown model';
 
@@ -209,7 +239,7 @@
     if (scan.supported) {
       const hours = num(scan.powerOnHours);
       const age = hours === null ? 'Hours unknown' : hours.toLocaleString('en-US') + ' h (' + (hours / 8766).toFixed(1) + ' yr)';
-      const n = (id) => { const c = attrCount(scan, id); return c === null ? 0 : c; };
+      const n = (id) => { const c = attrCount(scan, id); return c === null ? '?' : c; };
       line4 = age + ' · Realloc ' + n(5) + ' · Pend ' + n(197);
     }
 
