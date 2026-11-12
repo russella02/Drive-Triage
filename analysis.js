@@ -335,7 +335,10 @@
           severity: 'note', code: 'unsupported', short: ata ? 'SMART not readable' : 'Not supported yet',
           detail: ata
             ? 'This SATA drive returned no SMART attributes: SMART may be switched off, or the USB bridge is not passing commands through. Try scanning again with -d sat,16 or a direct SATA connection.'
-            : 'This is ' + (scan.protocol ? 'an ' + scan.protocol : 'a non-ATA') + ' drive (NVMe, SAS or another non-ATA type). Drive Triage judges SATA (ATA) drives only for now.'
+            : (scan.protocol
+              ? 'This is ' + (scan.protocol === 'NVMe' ? 'an ' : 'a ') + scan.protocol + ' drive.'
+              : 'This is a non-ATA drive (NVMe, SAS or another type).')
+              + ' Drive Triage judges SATA (ATA) drives only for now.'
         }]
       };
     }
