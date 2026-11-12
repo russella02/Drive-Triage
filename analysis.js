@@ -129,6 +129,9 @@
     return v !== null && v > 0 ? v : 1;
   }
 
+  // smartctl device protocols this app can name, in canonical case; anything else becomes ''.
+  const KNOWN_PROTOCOLS = ['ATA', 'NVMe', 'SCSI', 'SAS'];
+
   // ------------------------------------------------------------------ parseScan
   function parseScan(json, relPath) {
     if (!isObj(json) || !isObj(json.smartctl)) return null;
@@ -141,7 +144,9 @@
 
     const table = isObj(json.ata_smart_attributes) && Array.isArray(json.ata_smart_attributes.table)
       ? json.ata_smart_attributes.table : null;
-    const protocol = isObj(json.device) && typeof json.device.protocol === 'string' ? json.device.protocol : '';
+    // device.protocol is untrusted scan text that reaches finding wording: keep only known values.
+    const rawProtocol = isObj(json.device) && typeof json.device.protocol === 'string' ? json.device.protocol.trim().toUpperCase() : '';
+    const protocol = KNOWN_PROTOCOLS.find((p) => p.toUpperCase() === rawProtocol) || '';
     const supported = protocol === 'ATA' && table !== null;
 
     const attrs = {};

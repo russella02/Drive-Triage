@@ -156,3 +156,21 @@ test('unsupported reason depends on the device protocol', () => {
   assert.match(t.a.findings[0].detail, /bridge/);
   t.a.findings.forEach((f) => assert.ok(f.short.length <= A.RULES.shortMax));
 });
+
+// ---- security review: device.protocol is untrusted text, keep it to known values
+test('device protocol is limited to known values before it reaches any text', () => {
+  const nv = loadFixture();
+  nv.device.protocol = 'nvme';
+  delete nv.ata_smart_attributes;
+  const n = run(nv);
+  assert.equal(n.drive.latest.protocol, 'NVMe');
+  assert.match(n.a.findings[0].detail, /NVMe/);
+
+  const evil = loadFixture();
+  evil.device.protocol = 'Click here: evil.example';
+  delete evil.ata_smart_attributes;
+  const e = run(evil);
+  assert.equal(e.drive.latest.protocol, '');
+  assert.ok(!/evil|Click/.test(e.a.findings[0].detail), e.a.findings[0].detail);
+  assert.match(e.a.findings[0].detail, /a non-ATA drive/);
+});
