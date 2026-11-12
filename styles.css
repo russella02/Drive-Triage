@@ -310,6 +310,7 @@ button { font: inherit; color: inherit; }
 }
 .mast-sub { margin-top: 8px; color: var(--muted); font-size: 14.5px; }
 .mast-sub .mono { color: var(--ink); }
+.mast-sub .nw { white-space: nowrap; }
 .score { display: grid; justify-items: start; }
 .score-line { display: flex; align-items: baseline; gap: 8px; }
 .score-n { font-size: 56px; font-weight: 700; line-height: 1; }
@@ -365,6 +366,7 @@ button { font: inherit; color: inherit; }
 .plot text.watch-label { fill: var(--red); font-weight: 600; }
 .plot .trace { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .plot .dot { fill: var(--ink); }
+.plot .point { fill: var(--ink); stroke: var(--ground); stroke-width: 1.5; }
 .plot .ring { fill: var(--ground); stroke: var(--ink); stroke-width: 2; }
 .plot text.mark-label { fill: var(--ink); font-weight: 600; }
 .plot .cross { stroke: var(--blue); stroke-width: 1; }

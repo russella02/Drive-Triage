@@ -563,12 +563,15 @@ function masthead(entry) {
   const a = entry.assessment;
   const s = d.latest;
   const mono = (t) => h('span', { class: 'mono', text: t });
+  // each field is a no-wrap group, so narrow screens break lines only between fields
+  const field = (...kids) => h('span', { class: 'nw' }, kids);
+  const cap = SA.formatCapacity(s.capacityBytes);
   const sub = h('p', { class: 'mast-sub' }, joinDot([
-    s.model ? mono(s.model) : null,
-    s.family || null,
-    SA.formatCapacity(s.capacityBytes) || null,
-    ['SN ', mono(s.serial)],
-    s.firmware ? ['FW ', mono(s.firmware)] : null
+    s.model ? field(mono(s.model)) : null,
+    s.family ? field(s.family) : null,
+    cap ? field(cap) : null,
+    field('SN ', mono(s.serial)),
+    s.firmware ? field('FW ', mono(s.firmware)) : null
   ]));
   const score = h('div', { class: 'score' },
     h('p', { class: 'score-line' },
@@ -804,6 +807,21 @@ function rawSection(s) {
 }
 
 // -------------------------------------------------------------------------- curve
+// Null runs in the SCT log separated by MERGE_GAP or fewer readings form one unread band: [[start, end]].
+const MERGE_GAP = 3;
+function unreadBands(hist) {
+  const bands = [];
+  for (let i = 0; i < hist.length; i++) {
+    if (hist[i] !== null) continue;
+    let j = i;
+    while (j + 1 < hist.length && hist[j + 1] === null) j++;
+    const prev = bands[bands.length - 1];
+    if (prev && i - prev[1] - 1 <= MERGE_GAP) prev[1] = j; else bands.push([i, j]);
+    i = j;
+  }
+  return bands;
+}
+
 let curveObserver = null;
 function disconnectCurve() {
   if (curveObserver) { curveObserver.disconnect(); curveObserver = null; }
@@ -856,7 +874,7 @@ function mountCurve(plot, liveRegion, s) {
     const v = hist[i];
     const before = (n - 1 - i) * SAMPLE_MINUTES;
     const d = sampleDate(i);
-    const when = (d ? fmtClock(d) + ', ' : '') + (before === 0 ? 'at the scan' : fmtSpan(before) + ' before the scan');
+    const when = (d ? fmtClock(d) + ', ' : '') + (before === 0 ? 'last logged sample' : fmtSpan(before) + ' before the scan');
     return { value: v === null ? 'sensor unread' : v + ' °C', when };
   };
 
@@ -868,7 +886,7 @@ function mountCurve(plot, liveRegion, s) {
     const ph = H - m.t - m.b;
     const known = hist.filter((v) => v !== null);
     const life = s.temp && typeof s.temp.lifetimeMax === 'number' ? s.temp.lifetimeMax : null;
-    const watch = R.tempLifetimeWatch;
+    const watch = R.tempCurrentWatch; // the curve plots instantaneous temperature
     let lo = Math.min.apply(null, known);
     let hi = Math.max.apply(null, known.concat([watch], life === null ? [] : [life]));
     let y0 = Math.floor((lo - 3) / 5) * 5;
@@ -880,47 +898,57 @@ function mountCurve(plot, liveRegion, s) {
 
     const root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, width: String(W), height: String(H), 'aria-hidden': 'true', focusable: 'false' });
 
-    // grid: horizontal every 5 degrees, labels every 5 or 10 depending on height
+    // graph paper: minor cells under major lines (5 degrees, clock ticks); labels every 5 or 10 degrees
     const labelEvery = ph / ((y1 - y0) / 5) < 20 ? 10 : 5;
+    const pxPerMin = n > 1 ? pw / ((n - 1) * SAMPLE_MINUTES) : pw;
+    const step = [5, 10, 15, 30, 60, 120, 240, 480].find((st) => st * pxPerMin >= 90) || 480;
+    const sub = [10, 6, 5, 4, 3, 2].find((k) => step % k === 0 && (step / k) * pxPerMin >= 12) || 1;
+    const minorH = [];
     const gridH = [];
+    for (let v = y0; v <= y1; v += 2.5) minorH.push('M' + m.l + ' ' + y(v).toFixed(1) + 'H' + (m.l + pw));
     for (let v = y0; v <= y1; v += 5) gridH.push('M' + m.l + ' ' + y(v).toFixed(1) + 'H' + (m.l + pw));
-    root.append(svg('path', { class: 'grid-major', d: gridH.join(''), fill: 'none' }));
     for (let v = y0; v <= y1; v += 5) {
       if (v % labelEvery) continue;
       root.append(svg('text', { x: m.l - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end' }, v === y1 ? v + ' °C' : String(v)));
     }
 
-    // time ticks on round clock minutes, at least ~90px apart
-    const pxPerMin = n > 1 ? pw / ((n - 1) * SAMPLE_MINUTES) : pw;
-    const step = [5, 10, 15, 30, 60, 120, 240, 480].find((st) => st * pxPerMin >= 90) || 480;
+    // time ticks on round clock minutes, at least ~90px apart; minor lines between them
     const gridV = [];
+    const minorV = [];
+    const minorStep = step / sub;
     for (let i = 0; i < n; i++) {
       const d = sampleDate(i);
       const minutesBefore = (n - 1 - i) * SAMPLE_MINUTES;
-      const onTick = d ? (d.getHours() * 60 + d.getMinutes()) % step === 0 : minutesBefore % step === 0;
-      if (!onTick) continue;
+      const minuteOf = d ? d.getHours() * 60 + d.getMinutes() : -minutesBefore;
+      const onTick = ((minuteOf % step) + step) % step === 0;
+      const onMinor = sub > 1 && ((minuteOf % minorStep) + minorStep) % minorStep === 0;
       const xi = x(i);
+      if (!onTick) {
+        if (onMinor) minorV.push('M' + xi.toFixed(1) + ' ' + m.t + 'V' + (m.t + ph));
+        continue;
+      }
       gridV.push('M' + xi.toFixed(1) + ' ' + m.t + 'V' + (m.t + ph));
       if (xi > m.l + 18 && xi < m.l + pw - 18) {
         root.append(svg('text', { x: xi.toFixed(1), y: H - 6, 'text-anchor': 'middle' }, d ? fmtClock(d) : '−' + fmtSpan(minutesBefore)));
       }
     }
-    root.append(svg('path', { class: 'grid-minor', d: gridV.join(''), fill: 'none' }));
+    root.prepend(svg('path', { class: 'grid-minor', d: minorH.concat(minorV).join(''), fill: 'none' }),
+      svg('path', { class: 'grid-major', d: gridH.concat(gridV).join(''), fill: 'none' }));
     root.append(svg('path', { class: 'grid-major', d: 'M' + m.l + ' ' + m.t + 'V' + (m.t + ph) + 'M' + (m.l + pw) + ' ' + m.t + 'V' + (m.t + ph), fill: 'none' }));
 
-    // gaps where the sensor was not read
-    for (let i = 0; i < n; i++) {
-      if (hist[i] !== null) continue;
-      let j = i;
-      while (j + 1 < n && hist[j + 1] === null) j++;
-      const xa = x(Math.max(0, i - 1));
-      const xb = x(Math.min(n - 1, j + 1));
+    // bands where the sensor was not read: null runs separated by MERGE_GAP or fewer readings
+    // count as one band; readings inside a band are drawn as separate points, not a broken line
+    const bands = unreadBands(hist);
+    const inBand = new Array(n).fill(false);
+    bands.forEach(([a, b]) => {
+      for (let k = a; k <= b; k++) inBand[k] = true;
+      const xa = x(Math.max(0, a - 1));
+      const xb = x(Math.min(n - 1, b + 1));
       root.append(svg('rect', { class: 'gap', x: xa.toFixed(1), y: m.t, width: Math.max(2, xb - xa).toFixed(1), height: ph }));
-      if (xb - xa >= 96) {
-        root.append(svg('text', { class: 'gap-label', x: ((xa + xb) / 2).toFixed(1), y: (m.t + ph / 2).toFixed(1), 'text-anchor': 'middle' }, 'sensor unread'));
+      if (xb - xa >= 84) {
+        root.append(svg('text', { class: 'gap-label', x: ((xa + xb) / 2).toFixed(1), y: (m.t + 18).toFixed(1), 'text-anchor': 'middle' }, 'sensor unread'));
       }
-      i = j;
-    }
+    });
 
     // reference lines
     if (life !== null && life >= y0 && life <= y1) {
@@ -929,16 +957,20 @@ function mountCurve(plot, liveRegion, s) {
       const crowded = life <= watch && y(life) - y(watch) < 16;
       root.append(svg('text', { x: m.l + 8, y: (crowded ? y(life) + 15 : y(life) - 5).toFixed(1) }, 'lifetime max ' + life + ' °C'));
     }
+    // watch label above its line, unless the lifetime-max line sits just above it: then below
+    const watchCrowded = life !== null && life > watch && y(watch) - y(life) < 18;
     root.append(svg('path', { class: 'watch-line', d: 'M' + m.l + ' ' + y(watch).toFixed(1) + 'H' + (m.l + pw) }));
-    root.append(svg('text', { class: 'watch-label', x: m.l + pw - 8, y: (y(watch) - 5).toFixed(1), 'text-anchor': 'end' }, watch + ' °C watch limit'));
+    root.append(svg('text', { class: 'watch-label', x: m.l + pw - 8, y: (watchCrowded ? y(watch) + 15 : y(watch) - 5).toFixed(1), 'text-anchor': 'end' }, watch + ' °C watch (current)'));
 
-    // the trace, broken at gaps; a lone sample between gaps gets a dot
+    // the trace, broken at bands; a reading inside a band or with no valid neighbour is a point mark
+    const point = (i) => root.append(svg('circle', { class: 'point', cx: x(i).toFixed(1), cy: y(hist[i]).toFixed(1), r: 3 }));
     for (let i = 0; i < n; i++) {
       if (hist[i] === null) continue;
+      if (inBand[i]) { point(i); continue; }
       let j = i;
-      while (j + 1 < n && hist[j + 1] !== null) j++;
+      while (j + 1 < n && hist[j + 1] !== null && !inBand[j + 1]) j++;
       if (j === i) {
-        root.append(svg('circle', { class: 'dot', cx: x(i).toFixed(1), cy: y(hist[i]).toFixed(1), r: 2.5 }));
+        point(i);
       } else {
         const d = [];
         for (let k = i; k <= j; k++) d.push((k === i ? 'M' : 'L') + x(k).toFixed(1) + ' ' + y(hist[k]).toFixed(1));
@@ -963,7 +995,7 @@ function mountCurve(plot, liveRegion, s) {
       }
     }
     root.append(svg('circle', { class: 'dot', cx: x(last).toFixed(1), cy: y(hist[last]).toFixed(1), r: 5 }));
-    label(x(last), y(hist[last]), (last === n - 1 ? 'at scan ' : 'last read ') + hist[last] + ' °C', true);
+    label(x(last), y(hist[last]), 'last logged ' + hist[last] + ' °C', true);
 
     // crosshair (drawn on demand) and the hit area for the pointer
     const cross = svg('g', { class: 'crosshair', visibility: 'hidden' });
