@@ -79,7 +79,7 @@ test('sort order: retire, watch, keep, unsupported; then health; then name', () 
 });
 
 test('tolerates a byte-order mark and empty input', () => {
-  const r = A.analyzeFiles([{ relPath: HDD01, text: '﻿' + fixtureText() }]);
+  const r = A.analyzeFiles([{ relPath: HDD01, text: '\uFEFF' + fixtureText() }]);
   assert.equal(r.scanCount, 1);
   assert.equal(r.skipped, 0);
   assert.deepEqual(A.analyzeFiles([]), { drives: [], scanCount: 0, skipped: 0 });

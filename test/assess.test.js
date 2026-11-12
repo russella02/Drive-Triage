@@ -249,7 +249,9 @@ test('unknown self-test status is neither failure nor interruption', () => {
   delete j.ata_smart_self_test_log.standard.table[0].status;
   const a = assess(j);
   assert.ok(!codes(a).includes('selftest-failed'));
-  assert.equal(a.verdict, 'keep');
+  assert.notEqual(a.verdict, 'retire');
+  // an extended test with no status did not provably finish, so it does not count as a long test
+  assert.deepEqual(codes(a, 'watch'), ['no-long-test']);
 });
 
 test('RULES is exposed', () => {

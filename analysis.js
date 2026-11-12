@@ -14,7 +14,8 @@
     reallocRetire: 100,          // attr 5 above this retires; 1..this is a watch
     cmdTimeoutWatch: 5,          // attr 188 (decoded) above this is a watch
     nearThresholdGap: 10,        // normalized value within this of a (non-zero) threshold
-    nearThresholdMaxValue: 100,  // ...and strictly below this (healthy drives sit at 100)
+    nearThresholdMaxValue: 100,  // ...and strictly below this (healthy drives sit at 100). By design this
+                                 // also skips vendors that score on a 200 scale (e.g. WD 1/7/199 at 200)
     nearThresholdSkipIds: [190, 194],
     tempLifetimeWatch: 55,
     tempCurrentWatch: 50,
@@ -50,7 +51,7 @@
   // ------------------------------------------------------------ parse pieces
   // Known brands: family keyword, display name, model prefixes that already name the brand.
   const BRANDS = [
-    [/western digital|WDC?/i, 'Western Digital', ['WDC', 'WD']],
+    [/western digital|\bWDC?\b/i, 'Western Digital', ['WDC', 'WD']],
     [/seagate/i, 'Seagate', ['SEAGATE']],
     [/toshiba/i, 'Toshiba', ['TOSHIBA']],
     [/hitachi/i, 'Hitachi', ['HITACHI']],
@@ -69,7 +70,8 @@
     ['ST', 'Seagate'], ['WDC', 'Western Digital'], ['WD', 'Western Digital'],
     ['HGST', 'HGST'], ['HUS', 'HGST'], ['HDS', 'HGST'], ['HTS', 'HGST'],
     ['TOSHIBA', 'Toshiba'], ['DT', 'Toshiba'], ['MG', 'Toshiba'], ['MQ', 'Toshiba'],
-    ['SAMSUNG', 'Samsung'], ['HD', 'Samsung']
+    ['HDT', 'Hitachi'], ['HDP', 'Hitachi'],
+    ['SAMSUNG', 'Samsung'], [/^HD\d/, 'Samsung']
   ];
 
   function vendorOf(family, model) {
@@ -77,7 +79,7 @@
     const hit = BRANDS.find((b) => b[0].test(f));
     if (hit) return hit[1];
     const m = String(model || '').trim().toUpperCase();
-    const p = PREFIX_VENDORS.find((x) => m.startsWith(x[0]));
+    const p = PREFIX_VENDORS.find((x) => (typeof x[0] === 'string' ? m.startsWith(x[0]) : x[0].test(m)));
     return p ? p[1] : '';
   }
 
@@ -121,6 +123,11 @@
     if (!isObj(h) || !Array.isArray(h.table)) return [];
     return h.table.map(num);
   }
+  // Minutes between SCT history samples (1 unless the drive logs at a different interval).
+  function tempIntervalOf(h) {
+    const v = isObj(h) ? num(h.logging_interval_minutes) : null;
+    return v !== null && v > 0 ? v : 1;
+  }
 
   // ------------------------------------------------------------------ parseScan
   function parseScan(json, relPath) {
@@ -134,7 +141,8 @@
 
     const table = isObj(json.ata_smart_attributes) && Array.isArray(json.ata_smart_attributes.table)
       ? json.ata_smart_attributes.table : null;
-    const supported = isObj(json.device) && json.device.protocol === 'ATA' && table !== null;
+    const protocol = isObj(json.device) && typeof json.device.protocol === 'string' ? json.device.protocol : '';
+    const supported = protocol === 'ATA' && table !== null;
 
     const attrs = {};
     (table || []).forEach((a) => {
@@ -159,9 +167,11 @@
     const t = isObj(json.temperature) ? json.temperature : {};
 
     // smartctl lists the self-test log newest first; selfTests keeps that order (index 0 = newest).
-    const st = isObj(json.ata_smart_self_test_log) && isObj(json.ata_smart_self_test_log.standard)
-      && Array.isArray(json.ata_smart_self_test_log.standard.table)
-      ? json.ata_smart_self_test_log.standard.table : [];
+    // GSmartControl asks for the extended log (--log=xselftest); smartctl puts it under "extended"
+    // when GP log 0x07 is readable (native SATA or -d sat,16), else only "standard" exists.
+    const stLog = isObj(json.ata_smart_self_test_log) ? json.ata_smart_self_test_log : {};
+    const tableOf = (k) => (isObj(stLog[k]) && Array.isArray(stLog[k].table) ? stLog[k].table : null);
+    const st = tableOf('extended') || tableOf('standard') || [];
     const selfTests = st.map((e) => ({
       type: e.type && e.type.string,
       statusValue: e.status && e.status.value,
@@ -179,6 +189,7 @@
       time: isObj(json.local_time) ? num(json.local_time.time_t) : null,
       relPath,
       driveName: driveNameOf(relPath, model, String(serial)),
+      protocol,
       supported,
       attrs,
       smartPassed: isObj(json.smart_status) && typeof json.smart_status.passed === 'boolean'
@@ -186,6 +197,7 @@
       powerOnHours,
       temp: { current: num(t.current), lifetimeMax: num(t.lifetime_max) },
       tempHistory: tempHistoryOf(json.ata_sct_temperature_history),
+      tempIntervalMinutes: tempIntervalOf(json.ata_sct_temperature_history),
       selfTests,
       warning: warningOf(outputLines),
       satNeeds16: outputLines.some((l) => l.indexOf('require SAT ATA PASS-THROUGH (16)') >= 0),
@@ -311,11 +323,14 @@
   function assessDrive(drive) {
     const scan = drive.latest;
     if (!scan.supported) {
+      const ata = scan.protocol === 'ATA';
       return {
         verdict: 'unsupported', health: null, band: null,
         findings: [{
-          severity: 'note', code: 'unsupported', short: 'Not supported yet',
-          detail: 'This scan is not from a SATA/ATA drive with a SMART attribute table, so this app cannot judge it yet.'
+          severity: 'note', code: 'unsupported', short: ata ? 'SMART not readable' : 'Not supported yet',
+          detail: ata
+            ? 'This SATA drive returned no SMART attributes: SMART may be switched off, or the USB bridge is not passing commands through. Try scanning again with -d sat,16 or a direct SATA connection.'
+            : 'This is ' + (scan.protocol ? 'an ' + scan.protocol : 'a non-ATA') + ' drive (NVMe, SAS or another non-ATA type). Drive Triage judges SATA (ATA) drives only for now.'
         }]
       };
     }
@@ -333,7 +348,10 @@
     const tests = scan.selfTests || [];
     const isExtended = (x) => /extended/i.test(String(x.type || ''));
     const outcomes = tests.map((x) => selfTestOutcome(x.statusValue));
-    const hasExtended = tests.some(isExtended);
+    // a long test counts only if it ran to the end (pass or fail); interrupted ones do not
+    const completedExtended = tests.some((x, k) => isExtended(x) && (outcomes[k] === 'pass' || outcomes[k] === 'fail'));
+    // empty log on a sat,12 scan: the log may just be unreadable, so do not claim none was ever run
+    const logUnreadable = tests.length === 0 && scan.satNeeds16;
 
     // ---- RETIRE
     if (scan.smartPassed === false) {
@@ -443,10 +461,11 @@
     const nowHot = t.current !== null && t.current >= RULES.tempCurrentWatch;
     if (lifeHot || nowHot) {
       if (lifeHot) deduction += D.tempHot;
-      add('watch', 'temp-hot', 'Runs hot',
-        'The drive has reached ' + (lifeHot ? t.lifetimeMax : t.current) + ' °C'
-        + (nowHot ? ' and is currently at ' + t.current + ' °C' : '')
-        + '. Heat shortens a drive’s life.');
+      let heat;
+      if (lifeHot && nowHot && t.lifetimeMax !== t.current) heat = 'The drive has reached ' + t.lifetimeMax + ' °C and is currently at ' + t.current + ' °C.';
+      else if (nowHot) heat = 'The drive is currently at ' + t.current + ' °C' + (lifeHot ? ', its highest recorded temperature.' : '.');
+      else heat = 'The drive has reached ' + t.lifetimeMax + ' °C at some point.';
+      add('watch', 'temp-hot', 'Runs hot', heat + ' Heat shortens a drive’s life.');
     }
     const hours = scan.powerOnHours;
     if (hours !== null && hours > D.ageFreeHours) {
@@ -457,13 +476,11 @@
         'The drive has been powered on for ' + hours.toLocaleString('en-US') + ' hours (about '
         + years(hours) + ' years of running). Drives this old fail more often.');
     }
-    if (!hasExtended && tests.length === 0 && scan.satNeeds16) {
-      // empty log + sat,12 scan: the log may just be unreadable, so do not claim none was ever run
-    } else if (!hasExtended) {
+    if (!completedExtended && !logUnreadable) {
       deduction += D.noLongTest;
       add('watch', 'no-long-test', 'No long self-test yet',
-        'No extended (long) self-test appears in the log. That is the thorough surface check, so the drive has never been fully examined.');
-    } else if (hours !== null) {
+        'No finished extended (long) self-test appears in the log. That is the thorough surface check, so the drive has never been fully examined.');
+    } else if (completedExtended && hours !== null) {
       // newest extended test that passed; an unknown or failed one does not count
       const i = tests.findIndex((x, k) => isExtended(x) && outcomes[k] === 'pass' && typeof x.hours === 'number');
       if (i >= 0 && hours - tests[i].hours > RULES.staleLongTestHours) {
@@ -493,7 +510,7 @@
     }
     if (scan.satNeeds16) {
       add('note', 'sat12', 'Re-scan with sat,16',
-        'This scan used a 12-byte USB command mode and could not read every log. Scanning again with -d sat,16 may show more.');
+        'This scan used a 12-byte USB command mode and could not read every log. Scanning again with smartctl -x --json=o -d sat,16 <device> may show more.');
     }
     if (!lifeHot && !nowHot && t.lifetimeMax !== null && t.lifetimeMax >= RULES.tempLifetimeNote) {
       add('note', 'temp-warm', 'Got warm: ' + t.lifetimeMax + ' °C',
@@ -523,12 +540,17 @@
     (files || []).forEach((f) => {
       let json;
       try {
-        json = JSON.parse(String(f.text).replace(/^﻿/, ''));
+        json = JSON.parse(String(f.text).replace(/^\uFEFF/, ''));
       } catch (e) {
         skipped++;
         return;
       }
-      const s = parseScan(json, f.relPath);
+      let s = null;
+      try {
+        s = parseScan(json, f.relPath);
+      } catch (e) {
+        s = null; // valid JSON but a malformed scan: skip it like any other unreadable file
+      }
       if (!s) { skipped++; return; }
       scans.push(s);
     });
