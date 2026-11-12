@@ -288,6 +288,17 @@ async function readPickedFiles(fileList) {
 }
 
 function ingest(files, unreadable) {
+  try {
+    showResults(files, unreadable);
+  } catch (e) {
+    // an unexpected scan shape must not leave the page stuck on "Reading..."
+    setLoading(false);
+    state.entries = null;
+    renderIntro('error', { error: e });
+  }
+}
+
+function showResults(files, unreadable) {
   const res = SA.analyzeFiles(files);
   state.entries = res.drives;
   state.scanCount = res.scanCount;
@@ -452,7 +463,7 @@ function select(key) {
 }
 
 function onListKey(ev) {
-  if (!state.entries || !state.entries.length) return;
+  if (!state.entries || !state.entries.length || ev.ctrlKey || ev.altKey || ev.metaKey) return;
   const n = state.entries.length;
   let i = state.entries.findIndex((e) => e.drive.key === state.selectedKey);
   if (ev.key === 'ArrowDown') i = Math.min(n - 1, i + 1);
@@ -938,6 +949,7 @@ function mountCurve(plot, liveRegion, s) {
   }
 
   plot.addEventListener('keydown', (ev) => {
+    if (ev.ctrlKey || ev.altKey || ev.metaKey) return; // leave browser shortcuts (Alt+Left = back) alone
     const big = ev.shiftKey ? 10 : 1;
     let i = index === null ? n - 1 : index;
     if (ev.key === 'ArrowLeft') i -= big;
