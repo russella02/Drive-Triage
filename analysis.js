@@ -231,6 +231,9 @@
 
   function years(hours) { return Math.round(hours / 8766 * 10) / 10; }
 
+  // "1 sector" / "16 sectors": finding text never uses "(s)" placeholders.
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+
   function assessDrive(drive) {
     const scan = drive.latest;
     if (!scan.supported) {
@@ -281,19 +284,19 @@
     if (pending > 0) {
       deduction += Math.min(D.pendingCap, pending * D.pendingEach);
       add('retire', 'pending', withNum('Pending sectors', pending, 'Pending sectors'),
-        pending + ' sector(s) are waiting to be re-read or remapped. They could not be read reliably, so data stored there may already be damaged.');
+        plural(pending, 'sector') + (pending === 1 ? ' is' : ' are') + ' waiting to be re-read or remapped. They could not be read reliably, so data stored there may already be damaged.');
     }
     const offline = count(198);
     if (offline > 0) {
       deduction += Math.min(D.offlineCap, offline * D.offlineEach);
       add('retire', 'offline-unc', withNum('Offline unc.', offline, 'Offline unc.'),
-        offline + ' sector(s) could not be read even when the drive tested itself in the background. That data is likely lost.');
+        plural(offline, 'sector') + ' could not be read even when the drive tested itself in the background. That data is likely lost.');
     }
     const reported = count(187);
     if (reported > 0) {
       deduction += Math.min(D.reportedCap, reported * D.reportedEach);
       add('retire', 'reported-unc', withNum('Uncorrectable', reported, 'Uncorrectable'),
-        'The drive reported ' + reported + ' read error(s) it could not fix, so some data could not be returned to the computer.');
+        'The drive reported ' + plural(reported, 'read error') + ' it could not fix, so some data could not be returned to the computer.');
     }
     const realloc = count(5);
     if (realloc > 0) deduction += Math.min(D.reallocCap, Math.floor(realloc / D.reallocPerSectors));
@@ -324,19 +327,19 @@
     // ---- WATCH
     if (realloc >= 1 && realloc <= RULES.reallocRetire) {
       add('watch', 'realloc', withNum('Reallocated', realloc, 'Reallocated'),
-        'The drive has swapped out ' + realloc + ' damaged sector(s) for spares. A few can be normal, but keep an eye on whether the number grows.');
+        'The drive has swapped out ' + plural(realloc, 'damaged sector') + ' for spares. A few can be normal, but keep an eye on whether the number grows.');
     }
     const spin = count(10);
     if (spin > 0) {
       deduction += D.spinRetry;
       add('watch', 'spin-retry', withNum('Spin retries', spin, 'Spin retries'),
-        'The drive needed ' + spin + ' extra attempt(s) to get its platters up to speed, which can point to a weakening motor or bearings.');
+        'The drive needed ' + plural(spin, 'extra attempt') + ' to get its platters up to speed, which can point to a weakening motor or bearings.');
     }
     const timeouts = count(188);
     if (timeouts > RULES.cmdTimeoutWatch) {
       deduction += D.cmdTimeout;
       add('watch', 'cmd-timeout', withNum('Cmd timeouts', timeouts, 'Cmd timeouts'),
-        'The drive stopped responding to the computer ' + timeouts + ' times. This is often a power or cable fault but can be a failing drive.');
+        'The drive stopped responding to the computer ' + (timeouts === 1 ? 'once' : timeouts + ' times') + '. This is often a power or cable fault but can be a failing drive.');
     }
     // Refined near-threshold rule: healthy Seagates sit at value 100 with thresholds 97/99, so a
     // value of 100 never counts; temperature attributes are judged separately.
@@ -397,11 +400,18 @@
     }
 
     // ---- NOTE
-    if (scan.warning) add('note', 'model-warning', 'Known model problem', scan.warning);
+    // scan.warning keeps smartctl's own wording (shouty, with its links stripped); the finding
+    // says the same thing in plain sentence case. The raw output still carries the links.
+    if (scan.warning) {
+      add('note', 'model-warning', 'Known model problem',
+        'smartctl lists a known problem for some drives '
+        + (scan.family ? 'in the ' + scan.family + ' family' : 'of this model')
+        + '. This drive may or may not be affected; the raw smartctl output names where to read more.');
+    }
     const crc = count(199);
     if (crc > 0) {
       add('note', 'crc', withNum('Cable errors', crc, 'Cable errors'),
-        'The connection saw ' + crc + ' data transfer error(s). That is usually a bad cable or port rather than the drive itself.');
+        'The connection saw ' + plural(crc, 'data transfer error') + '. That is usually a bad cable or port rather than the drive itself.');
     }
     if (outcomes.indexOf('interrupted') >= 0) {
       add('note', 'selftest-interrupted', 'Self-test cut short',
