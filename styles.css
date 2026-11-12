@@ -367,6 +367,7 @@ button { font: inherit; color: inherit; }
 .plot .trace { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .plot .dot { fill: var(--ink); }
 .plot .point { fill: var(--ink); stroke: var(--ground); stroke-width: 1.5; }
+.plot .point.small { stroke-width: 0.75; }
 .plot .ring { fill: var(--ground); stroke: var(--ink); stroke-width: 2; }
 .plot text.mark-label { fill: var(--ink); font-weight: 600; }
 .plot .cross { stroke: var(--blue); stroke-width: 1; }
@@ -591,6 +592,14 @@ details.raw pre {
 /* The 2in x 1in @page rule is injected by printLabels() while labels print. */
 @media print {
   /* Label-only rules apply only while labels are being printed (Ctrl+P prints the normal page). */
+  /* Ctrl+P of the page itself: always print the light (paper) theme, whatever is on screen. */
+  :root:not(.printing-labels),
+  :root[data-theme="dark"]:not(.printing-labels) {
+    color-scheme: light;
+    --ground: #ffffff; --panel: #f4f5f7; --line: #d9dde3; --grid: #eceef2; --ink: #1a1a1a; --muted: #555b66;
+    --blue: #0b5cad; --blue-hover: #084a8c; --blue-wash: #e8f0f9; --on-blue: #ffffff;
+    --amber: #8c5e00; --red: #c23b2e; --gap-fill: #eef0f3; --selection: #cfe0f3; --shadow: none;
+  }
   :root.printing-labels, :root.printing-labels[data-theme="light"], :root.printing-labels[data-theme="dark"] {
     color-scheme: light;
     --ground: #fff; --panel: #fff; --line: #000; --grid: #fff; --ink: #000; --muted: #000;

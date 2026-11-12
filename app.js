@@ -13,7 +13,6 @@ const DB_NAME = 'drive-triage';
 const DB_STORE = 'handles';
 const DB_KEY = 'root';
 const MAX_FILE_BYTES = 16 * 1024 * 1024; // a smartctl JSON is ~100 KB; anything huge is not a scan
-const SAMPLE_MINUTES = 1;                // SCT temperature history: one sample per minute
 
 const VERDICT_LABEL = { retire: 'Retire', watch: 'Watch', keep: 'Keep', unsupported: 'Not supported yet' };
 const SEVERITY_LABEL = { retire: 'Retire', watch: 'Watch', note: 'Note' };
@@ -40,7 +39,8 @@ const state = {
   root: null,          // FileSystemDirectoryHandle in use
   savedHandle: null,   // handle remembered from a previous visit
   rootName: '',
-  loading: false
+  loading: false,
+  scanGen: 0          // bumps on every folder read; an older read that finishes late is dropped
 };
 
 const hasPicker = typeof window.showDirectoryPicker === 'function';
@@ -248,11 +248,12 @@ async function saveHandle(handle) {
 }
 
 // ------------------------------------------------------------- folder reading
-async function walk(dir, prefix, out, counter) {
+async function walk(dir, prefix, out, counter, stale) {
   for await (const [name, handle] of dir.entries()) {
+    if (stale()) return; // a newer folder read has started
     if (handle.kind === 'directory') {
       try {
-        await walk(handle, prefix + name + '/', out, counter);
+        await walk(handle, prefix + name + '/', out, counter, stale);
       } catch (e) {
         counter.unreadable++;
       }
@@ -287,6 +288,7 @@ async function chooseFolder() {
   state.savedHandle = handle;
   state.rootName = handle.name;
   state.selectedKey = null;
+  state.entries = null; // a different folder: do not show the old one's drives under the new name
   saveHandle(handle);
   await scanRoot();
 }
@@ -311,17 +313,21 @@ async function reopenSaved() {
 }
 
 async function scanRoot() {
-  if (!state.root || state.loading) return;
+  if (!state.root) return;
+  const gen = ++state.scanGen;
+  const stale = () => gen !== state.scanGen;
   setLoading(true);
   const files = [];
   const counter = { unreadable: 0 };
   try {
-    await walk(state.root, '', files, counter);
+    await walk(state.root, '', files, counter, stale);
   } catch (e) {
+    if (stale()) return;
     setLoading(false);
     renderIntro('error', { error: e });
     return;
   }
+  if (stale()) return;
   setLoading(false);
   ingest(files, counter.unreadable);
 }
@@ -330,13 +336,16 @@ async function readPickedFiles(fileList) {
   const list = Array.from(fileList || []);
   if (!list.length) return;
   const rel = (f) => String(f.webkitRelativePath || f.name);
+  const gen = ++state.scanGen;
   state.root = null;
   state.rootName = rel(list[0]).split('/')[0] || 'Selected folder';
   state.selectedKey = null;
+  state.entries = null;
   setLoading(true);
   const files = [];
   let unreadable = 0;
   for (const f of list) {
+    if (gen !== state.scanGen) return; // a newer folder read has started
     if (!/\.json$/i.test(f.name)) continue;
     if (f.size > MAX_FILE_BYTES) { unreadable++; continue; }
     try {
@@ -346,6 +355,7 @@ async function readPickedFiles(fileList) {
       unreadable++;
     }
   }
+  if (gen !== state.scanGen) return;
   setLoading(false);
   ingest(files, unreadable);
 }
@@ -447,7 +457,7 @@ function renderIntro(kind, opts) {
       state.jsonCount
         ? 'Drive Triage found ' + plural(state.jsonCount, '.json file') + ' here, but none is a smartctl scan.'
         : 'There are no .json files in this folder or its subfolders.',
-      'Save each drive’s scan as JSON from GSmartControl (or run smartctl -x -j) into this folder, one subfolder per drive, then rescan.'
+      'Save each drive’s scan as JSON from GSmartControl, or run smartctl -x --json=o <device> (add -d sat,16 for a USB bridge), into this folder, one subfolder per drive, then rescan.'
     ];
     actions = [
       h('button', { type: 'button', class: 'btn fill', onclick: rescan }, 'Rescan'),
@@ -483,11 +493,17 @@ function renderLoaded() {
   select(state.selectedKey);
 }
 
+function unsupportedReason(scan) {
+  return scan.protocol === 'ATA'
+    ? 'SMART attributes not readable (SMART off or bridge not passing commands)'
+    : 'NVMe, SAS or other non-ATA drive';
+}
+
 function driveRow(entry, i) {
   const d = entry.drive;
   const a = entry.assessment;
   const top = topFinding(a);
-  const reason = a.verdict === 'unsupported' ? 'NVMe, SAS or other non-ATA drive'
+  const reason = a.verdict === 'unsupported' ? unsupportedReason(d.latest)
     : top ? top.short : 'No problems found';
   const meta = joinDot([SA.formatCapacity(d.latest.capacityBytes), plural(d.scans.length, 'scan'), 'last ' + fmtDate(d.latest.time)]);
   const health = a.health === null ? '—' : String(a.health);
@@ -606,7 +622,7 @@ function unsupportedSection(a) {
   return h('section', { class: 'sec' },
     h('div', { class: 'unsupported-note' },
       h('p', { text: a.findings[0].detail }),
-      h('p', { text: 'Drive Triage judges SATA (ATA) drives for now; NVMe and SAS support may come later. The raw smartctl output is below.' })));
+      h('p', { text: 'The raw smartctl output is below.' })));
 }
 
 // ------------------------------------------------------------- findings, limits
@@ -731,7 +747,7 @@ function selfTestSection(s) {
   let content;
   if (!tests.length) {
     content = h('p', { class: 'table-note', text: s.satNeeds16
-      ? 'The self-test log could not be read in this scan. Scanning again with -d sat,16 may show it.'
+      ? 'The self-test log could not be read in this scan. Scanning again with smartctl -x --json=o -d sat,16 <device> may show it.'
       : 'No self-tests in the log yet.' });
   } else {
     const rows = tests.map((x) => {
@@ -807,7 +823,7 @@ function rawSection(s) {
 }
 
 // -------------------------------------------------------------------------- curve
-// Null runs in the SCT log separated by MERGE_GAP or fewer readings form one unread band: [[start, end]].
+// Null runs in the SCT log separated by MERGE_GAP or fewer readings form one band: [[start, end]].
 const MERGE_GAP = 3;
 function unreadBands(hist) {
   const bands = [];
@@ -842,14 +858,15 @@ function curveSection(s) {
         h('p', { text: 'No temperature history in this scan.' }),
         h('p', { text: 'The drive keeps no SCT temperature log, or this scan could not read it.' + (nowMax ? ' ' + nowMax + '.' : '') })));
   }
-  const span = (hist.length - 1) * SAMPLE_MINUTES;
+  const iv = s.tempIntervalMinutes || 1; // minutes between SCT samples
+  const span = (hist.length - 1) * iv;
   const readout = h('span', { class: 'sec-aside', 'aria-live': 'polite', text: 'Hover or use the arrow keys to read values' });
   const plot = h('div', {
     class: 'plot',
     tabindex: '0',
     role: 'group',
     'aria-roledescription': 'chart',
-    'aria-label': 'Temperature over the ' + fmtSpan(span) + ' before this scan, one sample per minute. '
+    'aria-label': 'Temperature over the ' + fmtSpan(span) + ' before this scan, ' + (iv === 1 ? 'one sample per minute' : 'one sample every ' + iv + ' minutes') + '. '
       + (nowMax ? nowMax + '. ' : '') + 'Use the Left and Right arrow keys to read each sample.'
   });
   const section = h('section', { class: 'sec', 'aria-labelledby': 'h-curve' },
@@ -869,10 +886,12 @@ function mountCurve(plot, liveRegion, s) {
   let index = null;    // sample under the crosshair
   let lastWidth = 0;
 
-  const sampleDate = (i) => (s.time === null ? null : new Date((s.time - (n - 1 - i) * SAMPLE_MINUTES * 60) * 1000));
+  const iv = s.tempIntervalMinutes || 1; // minutes between samples; the last sample is at the scan time
+  const span = (n - 1) * iv;
+  const sampleDate = (i) => (s.time === null ? null : new Date((s.time - (n - 1 - i) * iv * 60) * 1000));
   const describe = (i) => {
     const v = hist[i];
-    const before = (n - 1 - i) * SAMPLE_MINUTES;
+    const before = (n - 1 - i) * iv;
     const d = sampleDate(i);
     const when = (d ? fmtClock(d) + ', ' : '') + (before === 0 ? 'last logged sample' : fmtSpan(before) + ' before the scan');
     return { value: v === null ? 'sensor unread' : v + ' °C', when };
@@ -900,7 +919,7 @@ function mountCurve(plot, liveRegion, s) {
 
     // graph paper: minor cells under major lines (5 degrees, clock ticks); labels every 5 or 10 degrees
     const labelEvery = ph / ((y1 - y0) / 5) < 20 ? 10 : 5;
-    const pxPerMin = n > 1 ? pw / ((n - 1) * SAMPLE_MINUTES) : pw;
+    const pxPerMin = span > 0 ? pw / span : pw;
     const step = [5, 10, 15, 30, 60, 120, 240, 480].find((st) => st * pxPerMin >= 90) || 480;
     const sub = [10, 6, 5, 4, 3, 2].find((k) => step % k === 0 && (step / k) * pxPerMin >= 12) || 1;
     const minorH = [];
@@ -912,24 +931,27 @@ function mountCurve(plot, liveRegion, s) {
       root.append(svg('text', { x: m.l - 8, y: (y(v) + 4).toFixed(1), 'text-anchor': 'end' }, v === y1 ? v + ' °C' : String(v)));
     }
 
-    // time ticks on round clock minutes, at least ~90px apart; minor lines between them
+    // time ticks on round clock minutes, at least ~90px apart, with minor lines between them.
+    // Ticks are placed by time, not by sample, so any logging interval lands on the right minute.
     const gridV = [];
     const minorV = [];
     const minorStep = step / sub;
-    for (let i = 0; i < n; i++) {
-      const d = sampleDate(i);
-      const minutesBefore = (n - 1 - i) * SAMPLE_MINUTES;
-      const minuteOf = d ? d.getHours() * 60 + d.getMinutes() : -minutesBefore;
-      const onTick = ((minuteOf % step) + step) % step === 0;
-      const onMinor = sub > 1 && ((minuteOf % minorStep) + minorStep) % minorStep === 0;
-      const xi = x(i);
+    // local wall-clock minutes of the last sample (or 0 = "the scan" when the scan time is unknown)
+    const endMin = s.time === null ? 0 : Math.round(s.time / 60) - new Date(s.time * 1000).getTimezoneOffset();
+    const startMin = endMin - span;
+    const xt = (tm) => m.l + (span > 0 ? (tm - startMin) / span * pw : pw);
+    for (let tm = Math.ceil(startMin / minorStep) * minorStep; tm <= endMin; tm += minorStep) {
+      const xi = xt(tm);
+      const onTick = ((tm % step) + step) % step === 0;
       if (!onTick) {
-        if (onMinor) minorV.push('M' + xi.toFixed(1) + ' ' + m.t + 'V' + (m.t + ph));
+        minorV.push('M' + xi.toFixed(1) + ' ' + m.t + 'V' + (m.t + ph));
         continue;
       }
       gridV.push('M' + xi.toFixed(1) + ' ' + m.t + 'V' + (m.t + ph));
       if (xi > m.l + 18 && xi < m.l + pw - 18) {
-        root.append(svg('text', { x: xi.toFixed(1), y: H - 6, 'text-anchor': 'middle' }, d ? fmtClock(d) : '−' + fmtSpan(minutesBefore)));
+        const dayMin = ((tm % 1440) + 1440) % 1440;
+        const text = s.time === null ? '−' + fmtSpan(endMin - tm) : pad(Math.floor(dayMin / 60)) + ':' + pad(dayMin % 60);
+        root.append(svg('text', { x: xi.toFixed(1), y: H - 6, 'text-anchor': 'middle' }, text));
       }
     }
     root.prepend(svg('path', { class: 'grid-minor', d: minorH.concat(minorV).join(''), fill: 'none' }),
@@ -945,9 +967,24 @@ function mountCurve(plot, liveRegion, s) {
       const xa = x(Math.max(0, a - 1));
       const xb = x(Math.min(n - 1, b + 1));
       root.append(svg('rect', { class: 'gap', x: xa.toFixed(1), y: m.t, width: Math.max(2, xb - xa).toFixed(1), height: ph }));
-      if (xb - xa >= 84) {
-        root.append(svg('text', { class: 'gap-label', x: ((xa + xb) / 2).toFixed(1), y: (m.t + 18).toFixed(1), 'text-anchor': 'middle' }, 'sensor unread'));
-      }
+      // a band with readings scattered through it is intermittent, not unread
+      const mixed = hist.slice(a, b + 1).some((v) => v !== null);
+      const text = mixed ? 'intermittent readings' : 'sensor unread';
+      const cx = ((xa + xb) / 2).toFixed(1);
+      const oneLine = xb - xa >= (mixed ? 132 : 84);
+      const twoLines = !oneLine && mixed && xb - xa >= 80; // "intermittent" over "readings"
+      if (!oneLine && !twoLines) return;
+      // put the label where it crosses no reference line and no reading inside or beside the band
+      const blockH = twoLines ? 28 : 14;
+      const obstacles = [watch].concat(life === null ? [] : [life]).map(y)
+        .concat(hist.slice(Math.max(0, a - 1), b + 2).filter((v) => v !== null).map(y));
+      const clear = (top) => obstacles.every((oy) => oy < top - 4 || oy > top + blockH + 4);
+      const top = [m.t + ph / 2 - blockH / 2, m.t + 6, m.t + ph - blockH - 6].find(clear);
+      if (top === undefined) return;
+      const label = svg('text', { class: 'gap-label', x: cx, y: (top + 11).toFixed(1), 'text-anchor': 'middle' });
+      if (oneLine) label.textContent = text;
+      else label.append(svg('tspan', { x: cx }, 'intermittent'), svg('tspan', { x: cx, dy: '14' }, 'readings'));
+      root.append(label);
     });
 
     // reference lines
@@ -963,7 +1000,9 @@ function mountCurve(plot, liveRegion, s) {
     root.append(svg('text', { class: 'watch-label', x: m.l + pw - 8, y: (watchCrowded ? y(watch) + 15 : y(watch) - 5).toFixed(1), 'text-anchor': 'end' }, watch + ' °C watch (current)'));
 
     // the trace, broken at bands; a reading inside a band or with no valid neighbour is a point mark
-    const point = (i) => root.append(svg('circle', { class: 'point', cx: x(i).toFixed(1), cy: y(hist[i]).toFixed(1), r: 3 }));
+    // smaller marks on narrow plots so neighbouring readings do not smudge together
+    const small = W < 640;
+    const point = (i) => root.append(svg('circle', { class: small ? 'point small' : 'point', cx: x(i).toFixed(1), cy: y(hist[i]).toFixed(1), r: small ? 1.75 : 3 }));
     for (let i = 0; i < n; i++) {
       if (hist[i] === null) continue;
       if (inBand[i]) { point(i); continue; }
@@ -1086,7 +1125,7 @@ async function init() {
   }
   ui.rescan.addEventListener('click', rescan);
   ui.folder.addEventListener('click', chooseFolder);
-  ui.printAll.addEventListener('click', () => printLabels(state.entries || []));
+  ui.printAll.addEventListener('click', () => printLabels((state.entries || []).filter((e) => e.assessment.verdict !== 'unsupported')));
   ui.input.addEventListener('change', () => readPickedFiles(ui.input.files));
   ui.list.addEventListener('keydown', onListKey);
 
