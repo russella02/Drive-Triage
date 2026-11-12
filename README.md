@@ -2,7 +2,7 @@
 
 Drive Triage reads the SMART scans that GSmartControl (smartctl) saves as JSON for each hard drive, groups them per drive, and gives every drive a verdict (KEEP, WATCH or RETIRE) plus a 0-100 health score, with plain-English reasons. It can also print a 2" x 1" thermal label for each drive. It is meant for sorting a pile of old drives: open the page, point it at your scan folder, and see which drives to keep using, which to watch, and which to retire.
 
-It is a single local web page. There is no install, no server, no database and no internet connection. Your scan files are the history; the page only reads them.
+It is a single local web page. There is no install, no server, no database and no internet connection. Your scan files are the history; the page only reads them. The only things kept in the browser are the remembered folder handle and the theme choice.
 
 ## Screenshots
 
@@ -22,9 +22,9 @@ These screenshots use synthetic demo data alongside one real scan (HDD-01, a Sea
 2. Double-click `Drive-Triage.html`. It opens from disk in your browser.
 3. Choose your scans folder when asked. The page only reads it.
 
-Edge or Chrome is recommended. They remember the folder between visits, so you only pick it once. In other browsers the page still works, but you choose the folder with a folder picker each visit.
+Edge or Chrome is recommended. They remember the folder between visits, so you only pick it once; on a return visit you may need to click Reopen and allow read access. In other browsers the page still works, but you choose the folder with a folder picker each visit.
 
-Scans are grouped by drive using the subfolder name, so lay the folder out like this:
+Scans are grouped into drives by serial number and model. The subfolder name only supplies the drive's display name (taken from the most recent scan), so a layout like this works well:
 
 ```
 Hard Drive Tests/
@@ -35,7 +35,7 @@ Hard Drive Tests/
     ...
 ```
 
-The subfolder name (`HDD-01`) is the drive's name in the app and on its label. Several scans of the same drive build up its history. Files that are not JSON, or not smartctl scans, are skipped and counted in the status line.
+The subfolder name (`HDD-01`) is the drive's name in the app and on its label. Scans with the same serial number and model are one drive, even if they sit in different folders. Files that are not JSON, or not smartctl scans, are skipped and counted in the status line.
 
 Only ATA/SATA drives are supported so far. NVMe and SAS scans are listed as not supported yet.
 
@@ -55,9 +55,9 @@ Each drive's most recent scan is checked against a fixed set of rules. The verdi
 
 There are also notes (for example a cable-error count or a model warning from smartctl). Notes explain things but never change the verdict.
 
-The health score is a deterministic estimate, not a prediction: the same scans always give the same number. It starts at 100 and subtracts points for the findings below, then is capped for serious problems (at most 39 for RETIRE, at most 10 if SMART failed, an attribute is failing now, or the last self-test failed). Bands: 80-100 good, 50-79 fair, 0-49 poor.
+The health score is a deterministic estimate, not a prediction: the same scans always give the same number. It starts at 100 and subtracts points for the findings below (and for the reallocated-sector count, and for drive age beyond 20,000 power-on hours, up to 15 points), then is capped for serious problems (at most 39 for RETIRE, at most 10 if SMART failed, an attribute is failing now, or the last self-test failed). Bands: 80-100 good, 50-79 fair, 0-49 poor.
 
-Vendor quirks are handled so healthy drives are not flagged. In particular, Seagate packs several raw values (attributes 1, 7 and 195) into one number, so those are never used for judgement.
+Vendor quirks are handled so healthy drives are not flagged. In particular, Seagate packs several counters into the RAW values of attributes 1, 7 and 195, so those raw values are never used; their normalized values are judged like any other attribute.
 
 Main triggers:
 
@@ -72,8 +72,8 @@ Main triggers:
 | WATCH | 1 to 100 reallocated sectors |
 | WATCH | Any spin retries (10) |
 | WATCH | More than 5 command timeouts (188) |
-| WATCH | An attribute within 10 points of its failure threshold (while below 100) |
-| WATCH | An attribute that hit its failure limit in the past |
+| WATCH | An attribute within 10 points of its failure threshold (while below 100; temperature attributes 190 and 194 are excluded) |
+| WATCH | An attribute that hit its failure limit in the past (for 190 and 194 this is only a note) |
 | WATCH | Reached 55 C in its lifetime, or currently at 50 C or more |
 | WATCH | 50,000 power-on hours or more |
 | WATCH | No extended self-test in the log, or the last passing one is more than 168 power-on hours older than the scan |
@@ -91,7 +91,7 @@ Each drive can print a 2" x 1" label (one drive, or all drives at once), carryin
 5. The top watch or retire finding, or the lifetime maximum temperature if there is none
 6. Scan date and the latest extended self-test result (PASS, FAIL or none)
 
-The verdict word is not printed; the health score is. Long models and serials shrink to fit their line, with text kept at 6 pt or larger. Labels always print black on white, whatever theme the page is in.
+The verdict word is not printed; the health score is. Long models and serials shrink to fit their line, with text kept at 6 pt or larger; a line that still does not fit at 6 pt is cut off with an ellipsis. Labels always print black on white, whatever theme the page is in.
 
 Printer setup, in the print dialog and printer driver:
 
