@@ -46,7 +46,59 @@ const state = {
 const hasPicker = typeof window.showDirectoryPicker === 'function';
 
 // ------------------------------------------------------------------ labels (Task 4)
-function printLabels(entries) {}
+// One 2in x 1in label per drive, built with textContent only (scan data is untrusted).
+// Lines that are too wide shrink 0.25pt at a time down to 6pt, then truncate with an ellipsis.
+const LABEL_MIN_PT = 6;
+const LABEL_STEP_PT = 0.25;
+
+function buildLabel(L) {
+  const line = (cls, text) => {
+    const el = document.createElement('div');
+    el.className = 'label-line ' + cls;
+    el.dataset.fit = '1';
+    el.textContent = text;
+    return el;
+  };
+  const label = document.createElement('section');
+  label.className = 'label';
+  const head = document.createElement('div');
+  head.className = 'label-head';
+  const health = document.createElement('div');
+  health.className = 'label-health';
+  health.textContent = L.health;
+  head.append(line('label-name', L.name), health);
+  label.append(head, line('label-l2', L.line2), line('label-l3', L.line3),
+    line('label-l4', L.line4), line('label-l5', L.line5), line('label-l6', L.line6));
+  return label;
+}
+
+function fitLabel(label) {
+  label.querySelectorAll('[data-fit]').forEach((el) => {
+    let pt = parseFloat(getComputedStyle(el).fontSize) * 0.75;
+    while (el.scrollWidth > el.clientWidth && pt - LABEL_STEP_PT >= LABEL_MIN_PT) {
+      pt -= LABEL_STEP_PT;
+      el.style.fontSize = pt + 'pt';
+    }
+  });
+}
+
+function clearPrintArea() {
+  const area = document.getElementById('print-area');
+  if (area) area.textContent = '';
+}
+
+function printLabels(entries) {
+  const area = document.getElementById('print-area');
+  if (!area || !entries || !entries.length) return;
+  area.textContent = '';
+  entries.forEach((e) => area.appendChild(buildLabel(SA.labelLines(e.drive, e.assessment))));
+  // Measure at print size: off-screen, but laid out like the printed page.
+  area.classList.add('measuring');
+  Array.from(area.children).forEach(fitLabel);
+  area.classList.remove('measuring');
+  window.print();
+}
+window.addEventListener('afterprint', clearPrintArea);
 
 // ------------------------------------------------------------------------- DOM
 // h('p', { class: 'x', text: 'y' }, child, 'text', [more]) - strings become text nodes.

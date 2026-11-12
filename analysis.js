@@ -191,6 +191,50 @@
     return trim(bytes / 1e6, 0) + ' MB';
   }
 
+  // ------------------------------------------------------------------ labelLines
+  // The six text lines of the 2" x 1" label. Never mentions the verdict word.
+  function labelLines(drive, assessment) {
+    const scan = drive.latest;
+    const pad = (n) => (n < 10 ? '0' : '') + n;
+    const when = num(scan.time) === null ? null : new Date(scan.time * 1000);
+    const date = when ? when.getFullYear() + '-' + pad(when.getMonth() + 1) + '-' + pad(when.getDate()) : 'date unknown';
+
+    const model = String(scan.model || '').trim();
+    const vendor = String(scan.vendor || '').trim();
+    const head = vendor && model.toLowerCase().indexOf(vendor.toLowerCase()) !== 0 ? vendor + ' ' + model : model;
+    const cap = formatCapacity(scan.capacityBytes);
+    const line2 = (head + (cap ? '  ' + cap : '')).trim() || 'Unknown model';
+
+    let line4 = 'Not supported yet';
+    if (scan.supported) {
+      const hours = num(scan.powerOnHours);
+      const age = hours === null ? 'Hours unknown' : hours.toLocaleString('en-US') + ' h (' + (hours / 8766).toFixed(1) + ' yr)';
+      const n = (id) => { const c = attrCount(scan, id); return c === null ? 0 : c; };
+      line4 = age + ' · Realloc ' + n(5) + ' · Pend ' + n(197);
+    }
+
+    const top = (assessment.findings || []).find((f) => f.severity === 'retire' || f.severity === 'watch');
+    let line5;
+    if (top) line5 = '! ' + top.short;
+    else if (!scan.supported) line5 = 'Not supported yet';
+    else if (num(scan.temp && scan.temp.lifetimeMax) !== null) line5 = 'Max temp ' + scan.temp.lifetimeMax + '°C';
+    else line5 = 'Max temp unknown';
+
+    const ext = (scan.selfTests || []).find((x) => /extended/i.test(String(x.type || '')));
+    const outcome = ext ? selfTestOutcome(ext.statusValue) : null;
+    const long = outcome === 'pass' ? 'PASS' : outcome === 'fail' ? 'FAIL' : 'none';
+
+    return {
+      name: String(drive.name),
+      health: num(assessment.health) === null ? '—' : assessment.health + '%',
+      line2,
+      line3: 'SN ' + scan.serial,
+      line4,
+      line5,
+      line6: 'Scanned ' + date + ' · Long ' + long
+    };
+  }
+
   // --------------------------------------------------------------- groupDrives
   function groupDrives(scans) {
     const byKey = new Map();
@@ -470,6 +514,6 @@
     return { drives, scanCount, skipped };
   }
 
-  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive, analyzeFiles };
+  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive, labelLines, analyzeFiles };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else window.SmartAnalysis = api;
 })();
