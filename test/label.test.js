@@ -75,3 +75,23 @@ test('an unsupported drive still gets a clean label', () => {
   assert.equal(l.line5, 'Not supported yet');
   assert.equal(l.line4, 'Not supported yet');
 });
+
+test('Western Digital family with a WDC model: no "Western", no repeated vendor', () => {
+  const k = loadFixture();
+  k.model_name = 'WDC WD5000AAKS-00A7B0';
+  k.model_family = 'Western Digital Caviar SE Serial ATA';
+  assert.equal(labelOf(k).line2, 'WDC WD5000AAKS-00A7B0  500 GB');
+  const m = loadFixture();
+  m.model_name = 'WD5000AAKS';
+  m.model_family = 'Western Digital Caviar SE';
+  assert.equal(labelOf(m).line2, 'WD5000AAKS  500 GB');
+});
+
+test('a missing attribute 5 or 197 prints ? not 0', () => {
+  const j = loadFixture();
+  j.ata_smart_attributes.table = j.ata_smart_attributes.table.filter((a) => a.id !== 5);
+  assert.match(labelOf(j).line4, /Realloc \? · Pend 0$/);
+  const k = loadFixture();
+  k.ata_smart_attributes.table = k.ata_smart_attributes.table.filter((a) => a.id !== 197);
+  assert.match(labelOf(k).line4, /Realloc 0 · Pend \?$/);
+});

@@ -74,7 +74,7 @@ function buildLabel(L) {
 
 function fitLabel(label) {
   label.querySelectorAll('[data-fit]').forEach((el) => {
-    let pt = parseFloat(getComputedStyle(el).fontSize) * 0.75;
+    let pt = Math.round(parseFloat(getComputedStyle(el).fontSize) * 0.75 * 4) / 4;
     while (el.scrollWidth > el.clientWidth && pt - LABEL_STEP_PT >= LABEL_MIN_PT) {
       pt -= LABEL_STEP_PT;
       el.style.fontSize = pt + 'pt';
@@ -85,6 +85,9 @@ function fitLabel(label) {
 function clearPrintArea() {
   const area = document.getElementById('print-area');
   if (area) area.textContent = '';
+  document.documentElement.classList.remove('printing-labels');
+  const page = document.getElementById('label-page-size');
+  if (page) page.remove();
 }
 
 function printLabels(entries) {
@@ -96,6 +99,14 @@ function printLabels(entries) {
   area.classList.add('measuring');
   Array.from(area.children).forEach(fitLabel);
   area.classList.remove('measuring');
+  document.documentElement.classList.add('printing-labels');
+  // @page cannot be scoped by a class, so the 2in x 1in sheet size exists only while labels print.
+  if (!document.getElementById('label-page-size')) {
+    const page = document.createElement('style');
+    page.id = 'label-page-size';
+    page.textContent = '@page { size: 2in 1in; margin: 0; }';
+    document.head.appendChild(page);
+  }
   window.print();
 }
 window.addEventListener('afterprint', clearPrintArea);

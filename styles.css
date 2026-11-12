@@ -586,16 +586,16 @@ details.raw pre {
   print-color-adjust: exact;
 }
 
-@page { size: 2in 1in; margin: 0; }
-
+/* The 2in x 1in @page rule is injected by printLabels() while labels print. */
 @media print {
-  :root, :root[data-theme="light"], :root[data-theme="dark"] {
+  /* Label-only rules apply only while labels are being printed (Ctrl+P prints the normal page). */
+  :root.printing-labels, :root.printing-labels[data-theme="light"], :root.printing-labels[data-theme="dark"] {
     color-scheme: light;
     --ground: #fff; --panel: #fff; --line: #000; --grid: #fff; --ink: #000; --muted: #000;
     --blue: #000; --blue-hover: #000; --blue-wash: #fff; --on-blue: #fff;
     --amber: #000; --red: #000; --gap-fill: #fff; --selection: #fff; --shadow: none;
   }
-  html, body { width: 2in; margin: 0; padding: 0; color: #000; background: #fff; }
-  body > :not(#print-area) { display: none !important; }
-  #print-area { display: block; }
+  .printing-labels, .printing-labels body { width: 2in; margin: 0; padding: 0; color: #000; background: #fff; }
+  .printing-labels body > :not(#print-area) { display: none !important; }
+  .printing-labels #print-area { display: block; }
 }
