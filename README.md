@@ -8,11 +8,11 @@ It is a single local web page. There is no install, no server, no database and n
 
 Light theme:
 
-![Drive Triage drive list and detail view in the light theme, showing one drive with a WATCH verdict and health score 90](docs/images/drive-triage-light.png)
+![Drive Triage in the light theme: a worst-first list of four drives (one real scan and three synthetic demo drives) with HDD-01 selected, showing its WATCH verdict, health score 90, temperature curve, findings and limits](docs/images/drive-triage-light.png)
 
 Dark theme:
 
-![Drive Triage drive list and detail view in the dark theme, showing the same drive](docs/images/drive-triage-dark.png)
+![Drive Triage in the dark theme, showing the same four drives with HDD-01 selected](docs/images/drive-triage-dark.png)
 
 These screenshots use synthetic demo data alongside one real scan (HDD-01, a Seagate Barracuda 7200.11).
 
@@ -41,7 +41,7 @@ Only ATA/SATA drives are supported so far. NVMe and SAS scans are listed as not 
 
 ## Making scans
 
-- In GSmartControl, run the tests and save the report as JSON. Or from the command line, `smartctl --json=o -a <device>`.
+- In GSmartControl, run the tests and save the report as JSON. Or from the command line, `smartctl -x --json=o <device>` (add `-d sat,16` for a USB bridge). Use `-x`, not `-a`: `-a` leaves out the SCT temperature history and the extended self-test log. Use `--json=o`, not plain `-j`: the `o` keeps smartctl's text output, which the page uses for model warnings and shows as the raw output.
 - On USB or SATA bridges, scan with `-d sat,16` rather than `sat,12`. The 12-byte mode often cannot read every log, and the page will tell you when a scan looks like that.
 - Run an extended (long) self-test before saving the scan. Without one, the drive gets a "No long self-test yet" watch finding, and a long test that is much older than the scan is flagged as out of date.
 
