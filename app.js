@@ -431,12 +431,12 @@ function renderIntro(kind, opts) {
   if (kind === 'first') {
     head = 'Choose your scan folder';
     body = [
-      'Pick the folder where you save GSmartControl scans as JSON, ideally with one subfolder per drive. '
-        + 'Drive Triage reads every .json file inside it, groups the scans by drive, and lists the drives that need attention first.'
+      'Pick the one folder where you save all your GSmartControl scans as JSON. '
+        + 'Drive Triage reads every .json file inside it, sorts the scans by drive serial number, and lists the drives that need attention first.'
     ];
     actions = [chooseBtn('Choose folder', 'fill')];
     after = [readOnly, h('div', { class: 'intro-tree', 'aria-label': 'Example folder layout', role: 'img',
-      text: 'Hard Drive Tests/\n  HDD-01/\n    HDD-01-<model>_<serial>_<date>_<time>.json\n  HDD-02/\n    …' })];
+      text: 'Hard Drive Tests/\n  ST3500820AS_9QM3N9GS_2026-11-11_1618.json\n  TOSHIBA_DT01ACA050_74BPAVVAS_2026-11-11_1731.json\n  WDC_WD1003FZEX-00MK2A0_WD-WCC3F1703205_2026-11-11_2030.json\n  …' })];
   } else if (kind === 'reopen') {
     head = 'Reopen ' + name;
     body = [
@@ -457,7 +457,7 @@ function renderIntro(kind, opts) {
       state.jsonCount
         ? 'Drive Triage found ' + plural(state.jsonCount, '.json file') + ' here, but none is a smartctl scan.'
         : 'There are no .json files in this folder or its subfolders.',
-      'Save each drive’s scan as JSON from GSmartControl, or run smartctl -x --json=o <device> (add -d sat,16 for a USB bridge), into this folder, one subfolder per drive, then rescan.'
+      'Save each drive’s scan as JSON from GSmartControl, or run smartctl -x --json=o <device> (add -d sat,16 for a USB bridge), into this folder, then rescan. File names do not matter; scans are matched by serial number.'
     ];
     actions = [
       h('button', { type: 'button', class: 'btn fill', onclick: rescan }, 'Rescan'),
