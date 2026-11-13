@@ -91,14 +91,8 @@
     return !!b && b[2].some((p) => m.startsWith(p));
   }
 
-  function driveNameOf(relPath, model, serial) {
-    const parts = String(relPath || '').split(/[\\/]+/).filter(Boolean);
-    if (parts.length > 1) return parts[0];
-    const file = parts[0] || '';
-    if (model) {
-      const i = file.indexOf('-' + model);
-      if (i > 0) return file.slice(0, i);
-    }
+  // A drive is named by its serial number, wherever and however its scans are saved.
+  function driveNameOf(serial) {
     return serial;
   }
 
@@ -193,7 +187,7 @@
       capacityBytes: isObj(json.user_capacity) ? num(json.user_capacity.bytes) : null,
       time: isObj(json.local_time) ? num(json.local_time.time_t) : null,
       relPath,
-      driveName: driveNameOf(relPath, model, String(serial)),
+      driveName: driveNameOf(String(serial)),
       protocol,
       supported,
       attrs,
@@ -215,7 +209,10 @@
     const a = scan && scan.attrs && scan.attrs[id];
     if (!a || num(a.raw) === null) return null;
     // Modulo instead of & so raw values above 2^32 do not overflow.
-    if (id === 188 && scan.vendor === 'Seagate') return a.raw % 0x10000;
+    // Command_Timeout is packed as three 16-bit counters by Seagate, Toshiba and
+    // others (e.g. Toshiba raw 12386304 = 0x00BD0000 -> 0 timeouts). The first
+    // counter is the timeout count; a value that fits in 16 bits is used as-is.
+    if (id === 188) return a.raw % 0x10000;
     if (id === 190 || id === 194) return a.raw % 0x100;
     return a.raw;
   }
@@ -239,7 +236,8 @@
   }
 
   // ------------------------------------------------------------------ labelLines
-  // The six text lines of the 2" x 1" label. Never mentions the verdict word.
+  // The text lines of the 2" x 1" label. The name is the serial number, so there
+  // is no separate serial line. Never mentions the verdict word.
   function labelLines(drive, assessment) {
     const scan = drive.latest;
     const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -252,20 +250,20 @@
     const cap = formatCapacity(scan.capacityBytes);
     const line2 = (head + (cap ? '  ' + cap : '')).trim() || 'Unknown model';
 
-    let line4 = 'Not supported yet';
+    let line3 = 'Not supported yet';
     if (scan.supported) {
       const hours = num(scan.powerOnHours);
       const age = hours === null ? 'Hours unknown' : hours.toLocaleString('en-US') + ' h (' + (hours / 8766).toFixed(1) + ' yr)';
       const n = (id) => { const c = attrCount(scan, id); return c === null ? '?' : c; };
-      line4 = age + ' · Realloc ' + n(5) + ' · Pend ' + n(197);
+      line3 = age + ' · Realloc ' + n(5) + ' · Pend ' + n(197);
     }
 
     const top = (assessment.findings || []).find((f) => f.severity === 'retire' || f.severity === 'watch');
-    let line5;
-    if (top) line5 = '! ' + top.short;
-    else if (!scan.supported) line5 = 'Not supported yet';
-    else if (num(scan.temp && scan.temp.lifetimeMax) !== null) line5 = 'Max temp ' + scan.temp.lifetimeMax + '°C';
-    else line5 = 'Max temp unknown';
+    let line4;
+    if (top) line4 = '! ' + top.short;
+    else if (!scan.supported) line4 = 'Not supported yet';
+    else if (num(scan.temp && scan.temp.lifetimeMax) !== null) line4 = 'Max temp ' + scan.temp.lifetimeMax + '°C';
+    else line4 = 'Max temp unknown';
 
     const ext = (scan.selfTests || []).find((x) => /extended/i.test(String(x.type || '')));
     const outcome = ext ? selfTestOutcome(ext.statusValue) : null;
@@ -275,10 +273,9 @@
       name: String(drive.name),
       health: num(assessment.health) === null ? '—' : assessment.health + '%',
       line2,
-      line3: 'SN ' + scan.serial,
+      line3,
       line4,
-      line5,
-      line6: 'Scanned ' + date + ' · Long ' + long
+      line5: 'Scanned ' + date + ' · Long ' + long
     };
   }
 
