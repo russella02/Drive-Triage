@@ -16,7 +16,7 @@ test('skips bad files', () => {
   assert.equal(r.scanCount, 1);
   assert.equal(r.skipped, 2);
   assert.equal(r.drives.length, 1);
-  assert.equal(r.drives[0].drive.name, 'HDD-01');
+  assert.equal(r.drives[0].drive.name, '9QM3N9GS');
   assert.equal(r.drives[0].assessment.verdict, 'watch');
   assert.equal(r.drives[0].assessment.health, 90);
 });
@@ -52,7 +52,7 @@ test('sorts worst first', () => {
     { relPath: 'HDD-02/HDD-02-ST3500820AS_BADSERIAL.json', text: JSON.stringify(bad) }
   ]);
   assert.deepEqual(r.drives.map((e) => e.assessment.verdict), ['retire', 'watch']);
-  assert.deepEqual(r.drives.map((e) => e.drive.name), ['HDD-02', 'HDD-01']);
+  assert.deepEqual(r.drives.map((e) => e.drive.name), ['BADSERIAL', '9QM3N9GS']);
 });
 
 test('sort order: retire, watch, keep, unsupported; then health; then name', () => {
@@ -74,7 +74,7 @@ test('sort order: retire, watch, keep, unsupported; then health; then name', () 
     { relPath: HDD01, text: fixtureText() },
     { relPath: 'HDD-05/a.json', text: JSON.stringify(watchOld) }
   ]);
-  assert.deepEqual(r.drives.map((e) => e.drive.name), ['HDD-05', 'HDD-01', 'HDD-2', 'HDD-10', 'NVME-1']);
+  assert.deepEqual(r.drives.map((e) => e.drive.name), ['W2', '9QM3N9GS', 'K1', 'K2', 'N1']);
   assert.equal(r.drives[4].assessment.verdict, 'unsupported');
 });
 

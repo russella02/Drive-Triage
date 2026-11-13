@@ -30,7 +30,7 @@ test('extended self-test log is read: HDD-01 stays WATCH 90 with Long PASS', () 
   assert.equal(r.a.verdict, 'watch');
   assert.equal(r.a.health, 90);
   assert.ok(!r.codes.includes('no-long-test'));
-  assert.match(r.label.line6, /Long PASS$/);
+  assert.match(r.label.line5, /Long PASS$/);
 });
 
 test('a failed extended test in the extended log retires the drive', () => {
@@ -41,7 +41,7 @@ test('a failed extended test in the extended log retires the drive', () => {
   assert.equal(r.a.verdict, 'retire');
   assert.ok(r.a.health <= 10, String(r.a.health));
   assert.ok(r.codes.includes('selftest-failed'));
-  assert.match(r.label.line6, /Long FAIL$/);
+  assert.match(r.label.line5, /Long FAIL$/);
 });
 
 test('extended log is preferred over the standard log when both exist', () => {
@@ -98,7 +98,7 @@ test('a malformed scan is skipped and the rest of the folder still loads', () =>
   ]);
   assert.equal(r.scanCount, 1);
   assert.equal(r.skipped, 1);
-  assert.equal(r.drives[0].drive.name, 'HDD-01');
+  assert.equal(r.drives[0].drive.name, '9QM3N9GS');
 });
 
 // ---- 6. temperature wording names only the condition that fired

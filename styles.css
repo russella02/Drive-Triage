@@ -569,7 +569,7 @@ details.raw pre {
   color: #000;
   background: #fff;
   font-family: "Bahnschrift SemiCondensed", Bahnschrift, "Arial Narrow", Arial, sans-serif;
-  font-size: 7.5pt;
+  font-size: 8.5pt;
   line-height: 1.1;
   break-after: page;
   page-break-after: always;
@@ -577,13 +577,13 @@ details.raw pre {
 .label:last-child { break-after: auto; page-break-after: auto; }
 .label-head { display: flex; align-items: center; justify-content: space-between; gap: 0.06in; }
 .label-line { overflow: hidden; white-space: pre; text-overflow: ellipsis; }
-.label-name { flex: 1 1 auto; min-width: 0; font-size: 10pt; font-weight: 700; }
+.label-name { flex: 1 1 auto; min-width: 0; font-size: 11pt; font-weight: 700; }
 .label-health {
   flex: none;
   padding: 0.01in 0.05in;
   color: #fff;
   background: #000;
-  font-size: 10pt;
+  font-size: 11pt;
   font-weight: 700;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;

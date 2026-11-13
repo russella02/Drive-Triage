@@ -13,21 +13,20 @@ function labelOf(json, relPath) {
   return A.labelLines(d, A.assessDrive(d));
 }
 
-test('HDD-01 label', () => {
+test('HDD-01 label: serial as name, five lines, no separate SN line', () => {
   assert.deepEqual(labelOf(loadFixture()), {
-    name: 'HDD-01',
+    name: '9QM3N9GS',
     health: '90%',
     line2: 'Seagate ST3500820AS  500 GB',
-    line3: 'SN 9QM3N9GS',
-    line4: '3,793 h (0.4 yr) · Realloc 0 · Pend 0',
-    line5: '! Spin retries 16',
-    line6: 'Scanned 2026-11-11 · Long PASS'
+    line3: '3,793 h (0.4 yr) · Realloc 0 · Pend 0',
+    line4: '! Spin retries 16',
+    line5: 'Scanned 2026-11-11 · Long PASS'
   });
 });
 
-test('no watch/retire finding: line 5 is the lifetime max temperature', () => {
+test('no watch/retire finding: line 4 is the lifetime max temperature', () => {
   const l = labelOf(withAttr(loadFixture(), 10, { raw: { value: 0, string: '0' } }));
-  assert.equal(l.line5, 'Max temp 53°C');
+  assert.equal(l.line4, 'Max temp 53°C');
   assert.equal(l.health, '100%');
 });
 
@@ -46,18 +45,18 @@ test('vendor is not repeated when the model already starts with it', () => {
 test('long result only counts a passed or failed extended test', () => {
   const j = loadFixture();
   j.ata_smart_self_test_log.standard.table = [];
-  assert.match(labelOf(j).line6, /Long none$/);
+  assert.match(labelOf(j).line5, /Long none$/);
   const f = loadFixture();
   f.ata_smart_self_test_log.standard.table = [
     { type: { string: 'Short offline' }, status: { value: 0 }, lifetime_hours: 5 },
     { type: { string: 'Extended offline' }, status: { value: 0x70 }, lifetime_hours: 4 }
   ];
-  assert.match(labelOf(f).line6, /Long FAIL$/);
+  assert.match(labelOf(f).line5, /Long FAIL$/);
   const u = loadFixture();
   u.ata_smart_self_test_log.standard.table = [
     { type: { string: 'Extended offline' }, status: { value: 0x20 }, lifetime_hours: 4 }
   ];
-  assert.match(labelOf(u).line6, /Long none$/);
+  assert.match(labelOf(u).line5, /Long none$/);
 });
 
 test('an unsupported drive still gets a clean label', () => {
@@ -72,8 +71,8 @@ test('an unsupported drive still gets a clean label', () => {
   const l = labelOf(j, 'NVME-01/scan.json');
   assert.equal(l.health, '—');
   Object.keys(l).forEach((k) => assert.ok(typeof l[k] === 'string' && !/undefined|NaN|null/.test(l[k]), k + ': ' + l[k]));
-  assert.equal(l.line5, 'Not supported yet');
   assert.equal(l.line4, 'Not supported yet');
+  assert.equal(l.line3, 'Not supported yet');
 });
 
 test('Western Digital family with a WDC model: no "Western", no repeated vendor', () => {
@@ -90,8 +89,8 @@ test('Western Digital family with a WDC model: no "Western", no repeated vendor'
 test('a missing attribute 5 or 197 prints ? not 0', () => {
   const j = loadFixture();
   j.ata_smart_attributes.table = j.ata_smart_attributes.table.filter((a) => a.id !== 5);
-  assert.match(labelOf(j).line4, /Realloc \? · Pend 0$/);
+  assert.match(labelOf(j).line3, /Realloc \? · Pend 0$/);
   const k = loadFixture();
   k.ata_smart_attributes.table = k.ata_smart_attributes.table.filter((a) => a.id !== 197);
-  assert.match(labelOf(k).line4, /Realloc 0 · Pend \?$/);
+  assert.match(labelOf(k).line3, /Realloc 0 · Pend \?$/);
 });

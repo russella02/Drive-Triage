@@ -11,7 +11,7 @@ test('parses HDD-01', () => {
   assert.equal(s.serial, '9QM3N9GS');
   assert.equal(s.model, 'ST3500820AS');
   assert.equal(s.vendor, 'Seagate');
-  assert.equal(s.driveName, 'HDD-01');
+  assert.equal(s.driveName, '9QM3N9GS');
   assert.equal(s.time, 1794431755);
   assert.equal(s.powerOnHours, 3793);
   assert.deepEqual(s.temp, { current: 38, lifetimeMax: 53 });
@@ -31,14 +31,10 @@ test('parses HDD-01', () => {
   assert.equal(typeof s.rawOutput, 'string');
 });
 
-test('driveName from root-level file', () => {
-  const s = A.parseScan(loadFixture(), 'HDD-07-ST3500820AS_X_2026.json');
-  assert.equal(s.driveName, 'HDD-07');
-});
-
-test('driveName falls back to serial', () => {
-  const s = A.parseScan(loadFixture(), 'whatever.json');
-  assert.equal(s.driveName, '9QM3N9GS');
+test('driveName is always the serial number, whatever the folder or file name', () => {
+  for (const p of ['HDD-07/HDD-07-ST3500820AS_X_2026.json', 'HDD-07-ST3500820AS_X_2026.json', 'ST3500820AS_9QM3N9GS_2026-11-11_1618.json', 'whatever.json']) {
+    assert.equal(A.parseScan(loadFixture(), p).driveName, '9QM3N9GS');
+  }
 });
 
 test('decodes Seagate 188', () => {

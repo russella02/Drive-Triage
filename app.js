@@ -68,7 +68,7 @@ function buildLabel(L) {
   health.textContent = L.health;
   head.append(line('label-name', L.name), health);
   label.append(head, line('label-l2', L.line2), line('label-l3', L.line3),
-    line('label-l4', L.line4), line('label-l5', L.line5), line('label-l6', L.line6));
+    line('label-l4', L.line4), line('label-l5', L.line5));
   return label;
 }
 
@@ -586,7 +586,6 @@ function masthead(entry) {
     s.model ? field(mono(s.model)) : null,
     s.family ? field(s.family) : null,
     cap ? field(cap) : null,
-    field('SN ', mono(s.serial)),
     s.firmware ? field('FW ', mono(s.firmware)) : null
   ]));
   const score = h('div', { class: 'score' },
@@ -783,7 +782,7 @@ function attributesSection(s) {
     const packed = seagate && SEAGATE_PACKED.indexOf(id) >= 0;
     let decoded = '';
     if (packed) decoded = 'vendor-packed, not used';
-    else if (raw !== null && id === 188 && seagate) {
+    else if (raw !== null && id === 188) {
       const w = [raw % 65536, Math.floor(raw / 65536) % 65536, Math.floor(raw / 4294967296) % 65536];
       decoded = plural(w[0], 'timeout') + ' (counters ' + w.join(' · ') + ')';
     } else if (raw !== null && (id === 190 || id === 194)) decoded = (raw % 256) + ' °C';
