@@ -8,13 +8,13 @@ It is a single local web page. There is no install, no server, no database and n
 
 Light theme:
 
-![Drive Triage in the light theme: a worst-first list of four drives (one real scan and three synthetic demo drives) with HDD-01 selected, showing its WATCH verdict, health score 90, temperature curve, findings and limits](docs/images/drive-triage-light.png)
+![Drive Triage in the light theme: a worst-first list of three real drives named by serial number, with the Seagate 9QM3N9GS selected, showing its WATCH verdict, health score 90, temperature curve, findings and limits](docs/images/drive-triage-light.png)
 
 Dark theme:
 
-![Drive Triage in the dark theme, showing the same four drives with HDD-01 selected](docs/images/drive-triage-dark.png)
+![Drive Triage in the dark theme, showing the same three drives with 9QM3N9GS selected](docs/images/drive-triage-dark.png)
 
-These screenshots use synthetic demo data alongside one real scan (HDD-01, a Seagate Barracuda 7200.11).
+These screenshots show three real scans: a Seagate Barracuda 7200.11, a Toshiba DT01ACA050 and a WD Black.
 
 ## Quick start
 
@@ -24,18 +24,16 @@ These screenshots use synthetic demo data alongside one real scan (HDD-01, a Sea
 
 Edge or Chrome is recommended. They remember the folder between visits, so you only pick it once; on a return visit you may need to click Reopen and allow read access. In other browsers the page still works, but you choose the folder with a folder picker each visit.
 
-Scans are grouped into drives by serial number and model. The subfolder name only supplies the drive's display name (taken from the most recent scan), so a layout like this works well:
+Each drive is named by its serial number, in the app and on its label. Scans are grouped into drives by serial number and model, so you can keep every scan in one folder with GSmartControl's default file names, or organise them into subfolders however you like:
 
 ```
 Hard Drive Tests/
-  HDD-01/
-    HDD-01-<model>_<serial>_<date>_<time>.json
-    HDD-01-<model>_<serial>_<date>_<time>.json
-  HDD-02/
-    ...
+  ST3500820AS_9QM3N9GS_2026-11-11_1618.json
+  TOSHIBA_DT01ACA050_74BPAVVAS_2026-11-11_1731.json
+  WDC_WD1003FZEX-00MK2A0_WD-WCC3F1703205_2026-11-11_2030.json
 ```
 
-The subfolder name (`HDD-01`) is the drive's name in the app and on its label. Scans with the same serial number and model are one drive, even if they sit in different folders. Files that are not JSON, or not smartctl scans, are skipped and counted in the status line.
+Scans with the same serial number and model are one drive, wherever they sit; each new scan adds to that drive's history. Files that are not JSON, or not smartctl scans, are skipped and counted in the status line.
 
 Only ATA/SATA drives are supported so far. NVMe and SAS scans are listed as not supported yet.
 
