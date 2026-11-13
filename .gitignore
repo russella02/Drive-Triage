@@ -9,3 +9,7 @@ npm-debug.log*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Impeccable runtime state (surfaces/ and config are committed)
+.impeccable/questions/
+.impeccable/hook.cache.json
