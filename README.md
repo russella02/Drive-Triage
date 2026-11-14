@@ -1,8 +1,10 @@
 # Drive Triage
 
-Drive Triage reads the SMART scans that [GSmartControl](https://gsmartcontrol.shaduri.dev/) (smartctl) saves as JSON for each hard drive, groups them per drive, and gives every drive a verdict (KEEP, WATCH or RETIRE) plus a 0-100 health score, with plain-English reasons. It can also print a 2" x 1" thermal label for each drive. It is meant for sorting a pile of old drives: open the page, point it at your scan folder, and see which drives to keep using, which to watch, and which to retire.
+I had a pile of old hard drives and no quick way to tell which ones were still worth using. Drive Triage is what I built to sort them.
 
-It is a single web page. You can open it online or from disk; either way there is nothing to install, no server to run, no database, and your scan files never leave your computer. The scan files are the history; the page only reads them. The only things kept in the browser are the remembered folder handle and the theme choice.
+You scan each drive with [GSmartControl](https://gsmartcontrol.shaduri.dev/) (smartctl) and save the report as JSON. Drive Triage reads those files, groups them by drive, and gives each drive a verdict: KEEP, WATCH or RETIRE. Each drive also gets a 0-100 health score and the reasons behind it, in plain English. It can print a 2" x 1" thermal label for each drive too.
+
+It's a single web page. Use it online or open it from disk. Either way there's nothing to install, no server to run and no database, and your scan files never leave your computer. The scan files are the history; the page only reads them. All the browser remembers is your folder and your theme choice.
 
 ## Screenshots
 
@@ -14,19 +16,19 @@ Dark theme:
 
 ![Drive Triage in the dark theme, showing the same three drives with 9QM3N9GS selected](docs/images/drive-triage-dark.png)
 
-These screenshots show three real scans: a Seagate Barracuda 7200.11, a Toshiba DT01ACA050 and a WD Black.
+These are three real scans: a Seagate Barracuda 7200.11, a Toshiba DT01ACA050 and a WD Black.
 
 ## Quick start
 
 Use it online at https://russella02.github.io/Drive-Triage/ (Edge or Chrome), or run it from disk:
 
 1. Download or clone this repository.
-2. Double-click `Drive-Triage.html`. It opens from disk in your browser.
+2. Double-click `Drive-Triage.html` to open it in your browser.
 3. Choose your scans folder when asked. The page only reads it.
 
-Edge or Chrome is recommended. They remember the folder between visits, so you only pick it once; on a return visit you may need to click Reopen and allow read access. In other browsers the page still works, but you choose the folder with a folder picker each visit.
+Edge and Chrome work best, because they remember the folder, so you only pick it once. On a return visit you may need to click Reopen and allow read access. Other browsers work too, but you have to pick the folder every time.
 
-Each drive is named by its serial number, in the app and on its label. Scans are grouped into drives by serial number and model, so you can keep every scan in one folder with GSmartControl's default file names, or organise them into subfolders however you like:
+Drives are named by serial number, both in the app and on the label. Scans are grouped by serial number and model, so one folder with GSmartControl's default file names is enough. Subfolders are fine too, organised however you like:
 
 ```
 Hard Drive Tests/
@@ -35,31 +37,44 @@ Hard Drive Tests/
   WDC_WD1003FZEX-00MK2A0_WD-WCC3F1703205_2026-11-11_2030.json
 ```
 
-Scans with the same serial number and model are one drive, wherever they sit; each new scan adds to that drive's history. Files that are not JSON, or not smartctl scans, are skipped and counted in the status line.
+Scans with the same serial number and model count as one drive, wherever they sit. Each new scan adds to that drive's history. Anything that isn't a smartctl JSON scan is skipped and counted in the status line.
 
-Only ATA/SATA drives are supported so far. NVMe and SAS scans are listed as not supported yet.
+Only ATA/SATA drives are supported for now. NVMe and SAS scans show up as not supported yet.
 
 ## Making scans
 
-You need [GSmartControl](https://gsmartcontrol.shaduri.dev/downloads), a free SMART tool that includes smartctl. Download it from its official site.
+You need [GSmartControl](https://gsmartcontrol.shaduri.dev/downloads), a free SMART tool that comes with smartctl. Get it from the official site.
 
-- In GSmartControl, run the tests and save the report as JSON. Or from the command line, `smartctl -x --json=o <device>` (add `-d sat,16` for a USB bridge). Use `-x`, not `-a`: `-a` leaves out the SCT temperature history and the extended self-test log. Use `--json=o`, not plain `-j`: the `o` keeps smartctl's text output, which the page uses for model warnings and shows as the raw output.
-- On USB or SATA bridges, scan with `-d sat,16` rather than `sat,12`. The 12-byte mode often cannot read every log, and the page will tell you when a scan looks like that.
-- Run an extended (long) self-test before saving the scan. Without one, the drive gets a "No long self-test yet" watch finding, and a long test that is much older than the scan is flagged as out of date.
+- In GSmartControl, run the tests and save the report as JSON. From the command line, use `smartctl -x --json=o <device>` (add `-d sat,16` for a USB bridge).
+  - Use `-x`, not `-a`. `-a` leaves out the SCT temperature history and the extended self-test log.
+  - Use `--json=o`, not plain `-j`. The `o` keeps smartctl's text output, which the page uses for model warnings and shows as the raw output.
+- On USB or SATA bridges, scan with `-d sat,16`, not `sat,12`. The 12-byte mode often can't read every log, and the page tells you when a scan looks like that.
+- Run an extended (long) self-test before you save the scan. Without one, the drive gets a "No long self-test yet" watch finding. A long test much older than the scan is flagged as out of date.
 
 ## How verdicts work
 
-Each drive's most recent scan is checked against a fixed set of rules. The verdict is the worst severity found:
+Each drive's latest scan is checked against a fixed set of rules, and the worst finding sets the verdict:
 
 - **RETIRE**: at least one retire finding.
 - **WATCH**: no retire findings, at least one watch finding.
 - **KEEP**: neither.
 
-There are also notes (for example a cable-error count or a model warning from smartctl). Notes explain things but never change the verdict.
+Some findings are only notes, like a cable-error count or a model warning from smartctl. Notes explain things but never change the verdict.
 
-The health score is a deterministic estimate, not a prediction: the same scans always give the same number. It starts at 100 and subtracts points for the findings below (and for the reallocated-sector count, and for drive age beyond 20,000 power-on hours, up to 15 points), then is capped for serious problems (at most 39 for RETIRE, at most 10 if SMART failed, an attribute is failing now, or the last self-test failed). Bands: 80-100 good, 50-79 fair, 0-49 poor.
+The health score is an estimate, not a prediction, and the same scans always give the same number. It starts at 100 and loses points for:
 
-Vendor quirks are handled so healthy drives are not flagged. In particular, Seagate packs several counters into the RAW values of attributes 1, 7 and 195, so those raw values are never used; their normalized values are judged like any other attribute.
+- the findings below,
+- the reallocated-sector count,
+- age past 20,000 power-on hours (up to 15 points).
+
+Then it's capped for serious problems:
+
+- at most 39 for RETIRE,
+- at most 10 if SMART failed, an attribute is failing now, or the last self-test failed.
+
+Bands: 80-100 good, 50-79 fair, 0-49 poor.
+
+Vendor quirks are handled so healthy drives don't get flagged. For example, Seagate packs several counters into the RAW values of attributes 1, 7 and 195. Those raw values are never used; the normalized values are judged like any other attribute.
 
 Main triggers:
 
@@ -80,11 +95,11 @@ Main triggers:
 | WATCH | 50,000 power-on hours or more |
 | WATCH | No extended self-test in the log, or the last passing one is more than 168 power-on hours older than the scan |
 
-The exact numbers, and the point deductions behind the score, live in the `RULES` table at the top of `analysis.js`.
+The exact numbers, and the points behind the score, are in the `RULES` table at the top of `analysis.js`.
 
 ## Labels
 
-Each drive can print a 2" x 1" label (one drive, or all drives at once), carrying:
+You can print a 2" x 1" label for one drive or for all of them at once. Each label shows:
 
 1. Drive name and health score (inverted box)
 2. Vendor, model and capacity
@@ -93,7 +108,7 @@ Each drive can print a 2" x 1" label (one drive, or all drives at once), carryin
 5. The top watch or retire finding, or the lifetime maximum temperature if there is none
 6. Scan date and the latest extended self-test result (PASS, FAIL or none)
 
-The verdict word is not printed; the health score is. Long models and serials shrink to fit their line, with text kept at 6 pt or larger; a line that still does not fit at 6 pt is cut off with an ellipsis. Labels always print black on white, whatever theme the page is in.
+The label shows the health score, not the verdict word. Long models and serials shrink to fit their line, but never below 6 pt; a line that still doesn't fit gets cut off with an ellipsis. Labels always print black on white, whatever theme the page is in.
 
 Printer setup, in the print dialog and printer driver:
 
@@ -104,15 +119,15 @@ Printer setup, in the print dialog and printer driver:
 
 ## Themes
 
-The page follows your system light or dark setting and updates if it changes. The System / Light / Dark switch in the header overrides it, and your choice is remembered on this machine.
+The page follows your system's light or dark setting, and switches when it changes. To override it, use the System / Light / Dark switch in the header. Your choice is remembered on this machine.
 
 ## Privacy and safety
 
-Drive Triage runs entirely in your browser, whether you open it online or from disk. It never modifies, moves or deletes your scan files (the folder is opened read-only), and nothing is uploaded anywhere.
+Everything runs in your browser, whether you open it online or from disk. The folder is opened read-only, so your scan files are never changed, moved or deleted, and nothing is uploaded anywhere.
 
 ## Development
 
-Plain HTML, CSS and JavaScript with no build step. Tests use the Node test runner (Node 24):
+Plain HTML, CSS and JavaScript, with no build step. Tests use the Node test runner (Node 24):
 
 ```
 node --test
@@ -126,11 +141,11 @@ Layout:
 - `styles.css`: styles
 - `test/`: unit tests and fixtures
 
-CI runs the tests on every pull request and on pushes to `main`.
+CI runs the tests on every pull request and every push to `main`.
 
 ## Roadmap
 
-Running Drive Triage as a lightweight homelab service, using the same analysis code, is being considered: [issue #1](https://github.com/russella02/Drive-Triage/issues/1).
+I'm considering running Drive Triage as a lightweight homelab service, using the same analysis code: [issue #1](https://github.com/russella02/Drive-Triage/issues/1).
 
 ## License
 
