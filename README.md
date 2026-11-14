@@ -1,5 +1,13 @@
 # Drive Triage
 
+<p align="center">
+  <a href="https://russella02.github.io/Drive-Triage/"><img alt="Live app: Open Drive Triage" src="https://img.shields.io/badge/Live_app-Open_Drive_Triage-0b5cad?style=for-the-badge&labelColor=555b66&logo=googlechrome&logoColor=white"></a>
+  <a href="https://github.com/russella02/Drive-Triage/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/russella02/Drive-Triage/test.yml?branch=main&style=for-the-badge&label=Tests&labelColor=555b66"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/russella02/Drive-Triage?style=for-the-badge&labelColor=555b66&color=0b5cad"></a>
+  <img alt="Runs in: Your browser" src="https://img.shields.io/badge/Runs_in-Your_browser-0b5cad?style=for-the-badge&labelColor=555b66">
+  <img alt="Uploads: None" src="https://img.shields.io/badge/Uploads-None-0b5cad?style=for-the-badge&labelColor=555b66">
+</p>
+
 I had a pile of old hard drives and no quick way to tell which ones were still worth using. Drive Triage is what I built to sort them.
 
 You scan each drive with [GSmartControl](https://gsmartcontrol.shaduri.dev/) (smartctl) and save the report as JSON. Drive Triage reads those files, groups them by drive, and gives each drive a verdict: KEEP, WATCH or RETIRE. Each drive also gets a 0-100 health score and the reasons behind it, in plain English. It can print a 2" x 1" thermal label for each drive too.
@@ -19,6 +27,8 @@ Dark theme:
 These are three real scans: a Seagate Barracuda 7200.11, a Toshiba DT01ACA050 and a WD Black.
 
 ## Quick start
+
+<img alt="Install: Not needed" src="https://img.shields.io/badge/Install-Not_needed-0b5cad?style=for-the-badge&labelColor=555b66"> <img alt="Browser: Edge or Chrome" src="https://img.shields.io/badge/Browser-Edge_or_Chrome-8c5e00?style=for-the-badge&labelColor=555b66"> <img alt="Drives: ATA / SATA" src="https://img.shields.io/badge/Drives-ATA_%2F_SATA-8c5e00?style=for-the-badge&labelColor=555b66">
 
 Use it online at https://russella02.github.io/Drive-Triage/ (Edge or Chrome), or run it from disk:
 
@@ -43,6 +53,8 @@ Only ATA/SATA drives are supported for now. NVMe and SAS scans show up as not su
 
 ## Making scans
 
+<a href="https://gsmartcontrol.shaduri.dev/downloads"><img alt="Needs: GSmartControl" src="https://img.shields.io/badge/Needs-GSmartControl-8c5e00?style=for-the-badge&labelColor=555b66"></a>
+
 You need [GSmartControl](https://gsmartcontrol.shaduri.dev/downloads), a free SMART tool that comes with smartctl. Get it from the official site.
 
 - In GSmartControl, run the tests and save the report as JSON. From the command line, use `smartctl -x --json=o <device>` (add `-d sat,16` for a USB bridge).
@@ -52,6 +64,8 @@ You need [GSmartControl](https://gsmartcontrol.shaduri.dev/downloads), a free SM
 - Run an extended (long) self-test before you save the scan. Without one, the drive gets a "No long self-test yet" watch finding. A long test much older than the scan is flagged as out of date.
 
 ## How verdicts work
+
+<img alt="Verdicts: Keep, Watch, Retire" src="https://img.shields.io/badge/Verdicts-Keep_%C2%B7_Watch_%C2%B7_Retire-c23b2e?style=for-the-badge&labelColor=555b66">
 
 Each drive's latest scan is checked against a fixed set of rules, and the worst finding sets the verdict:
 
@@ -98,6 +112,8 @@ Main triggers:
 The exact numbers, and the points behind the score, are in the `RULES` table at the top of `analysis.js`.
 
 ## Labels
+
+<img alt="Labels: 2 by 1 inch thermal" src="https://img.shields.io/badge/Labels-2%22_x_1%22_thermal-c23b2e?style=for-the-badge&labelColor=555b66">
 
 You can print a 2" x 1" label for one drive or for all of them at once. Each label shows:
 
