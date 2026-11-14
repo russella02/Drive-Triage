@@ -125,6 +125,10 @@ You can print a 2" x 1" label for one drive or for all of them at once. Each lab
 5. The top watch or retire finding, or the lifetime maximum temperature if there is none
 6. Scan date and the latest extended self-test result (PASS, FAIL or none)
 
+Here are the labels for the three drives in the screenshots, printed on a 2" x 1" thermal roll:
+
+<img src="docs/images/label-example.jpg" alt="Three printed 2 by 1 inch labels on a roll: WD-WCC3F1703205 at 100%, 74BPAVVAS at 99%, and 9QM3N9GS at 90% with the finding 'Spin retries 16'. Each shows the model and capacity, power-on hours, reallocated and pending counts, max temperature or top finding, scan date and long self-test result." width="360">
+
 The label shows the health score, not the verdict word. Long models and serials shrink to fit their line, but never below 6 pt; a line that still doesn't fit gets cut off with an ellipsis. Labels always print black on white, whatever theme the page is in.
 
 Printer setup, in the print dialog and printer driver:
