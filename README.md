@@ -18,6 +18,8 @@ These screenshots show three real scans: a Seagate Barracuda 7200.11, a Toshiba 
 
 ## Quick start
 
+Or open it online at https://russella02.github.io/Drive-Triage/ (Edge or Chrome).
+
 1. Download or clone this repository.
 2. Double-click `Drive-Triage.html`. It opens from disk in your browser.
 3. Choose your scans folder when asked. The page only reads it.
@@ -104,7 +106,7 @@ The page follows your system light or dark setting and updates if it changes. Th
 
 ## Privacy and safety
 
-Drive Triage runs entirely in your browser, offline. It never modifies, moves or deletes your scan files (the folder is opened read-only), and nothing is uploaded anywhere.
+Drive Triage runs entirely in your browser, offline. It never modifies, moves or deletes your scan files (the folder is opened read-only), and nothing is uploaded anywhere. The online version works the same way: it reads your files only in your browser and uploads nothing.
 
 ## Development
 
@@ -121,13 +123,12 @@ Layout:
 - `app.js`: the UI, folder reading, theme and label printing
 - `styles.css`: styles
 - `test/`: unit tests and fixtures
-- `docs/superpowers/`: design spec and implementation plan
 
 CI runs the tests on every pull request and on pushes to `main`.
 
 ## Roadmap
 
-Running Drive Triage as a lightweight homelab service, using the same analysis code, is being considered: [issue #6](https://github.com/russella02/Drive-Triage/issues/6).
+Running Drive Triage as a lightweight homelab service, using the same analysis code, is being considered: [issue #1](https://github.com/russella02/Drive-Triage/issues/1).
 
 ## License
 
