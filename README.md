@@ -1,8 +1,8 @@
 # Drive Triage
 
-Drive Triage reads the SMART scans that GSmartControl (smartctl) saves as JSON for each hard drive, groups them per drive, and gives every drive a verdict (KEEP, WATCH or RETIRE) plus a 0-100 health score, with plain-English reasons. It can also print a 2" x 1" thermal label for each drive. It is meant for sorting a pile of old drives: open the page, point it at your scan folder, and see which drives to keep using, which to watch, and which to retire.
+Drive Triage reads the SMART scans that [GSmartControl](https://gsmartcontrol.shaduri.dev/) (smartctl) saves as JSON for each hard drive, groups them per drive, and gives every drive a verdict (KEEP, WATCH or RETIRE) plus a 0-100 health score, with plain-English reasons. It can also print a 2" x 1" thermal label for each drive. It is meant for sorting a pile of old drives: open the page, point it at your scan folder, and see which drives to keep using, which to watch, and which to retire.
 
-It is a single local web page. There is no install, no server, no database and no internet connection. Your scan files are the history; the page only reads them. The only things kept in the browser are the remembered folder handle and the theme choice.
+It is a single web page. You can open it online or from disk; either way there is nothing to install, no server to run, no database, and your scan files never leave your computer. The scan files are the history; the page only reads them. The only things kept in the browser are the remembered folder handle and the theme choice.
 
 ## Screenshots
 
@@ -18,7 +18,7 @@ These screenshots show three real scans: a Seagate Barracuda 7200.11, a Toshiba 
 
 ## Quick start
 
-Or open it online at https://russella02.github.io/Drive-Triage/ (Edge or Chrome).
+Use it online at https://russella02.github.io/Drive-Triage/ (Edge or Chrome), or run it from disk:
 
 1. Download or clone this repository.
 2. Double-click `Drive-Triage.html`. It opens from disk in your browser.
@@ -40,6 +40,8 @@ Scans with the same serial number and model are one drive, wherever they sit; ea
 Only ATA/SATA drives are supported so far. NVMe and SAS scans are listed as not supported yet.
 
 ## Making scans
+
+You need [GSmartControl](https://gsmartcontrol.shaduri.dev/downloads), a free SMART tool that includes smartctl. Download it from its official site.
 
 - In GSmartControl, run the tests and save the report as JSON. Or from the command line, `smartctl -x --json=o <device>` (add `-d sat,16` for a USB bridge). Use `-x`, not `-a`: `-a` leaves out the SCT temperature history and the extended self-test log. Use `--json=o`, not plain `-j`: the `o` keeps smartctl's text output, which the page uses for model warnings and shows as the raw output.
 - On USB or SATA bridges, scan with `-d sat,16` rather than `sat,12`. The 12-byte mode often cannot read every log, and the page will tell you when a scan looks like that.
@@ -106,7 +108,7 @@ The page follows your system light or dark setting and updates if it changes. Th
 
 ## Privacy and safety
 
-Drive Triage runs entirely in your browser, offline. It never modifies, moves or deletes your scan files (the folder is opened read-only), and nothing is uploaded anywhere. The online version works the same way: it reads your files only in your browser and uploads nothing.
+Drive Triage runs entirely in your browser, whether you open it online or from disk. It never modifies, moves or deletes your scan files (the folder is opened read-only), and nothing is uploaded anywhere.
 
 ## Development
 
