@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://russella02.github.io/Drive-Triage/"><img alt="Live app: Open Drive Triage" src="https://img.shields.io/badge/Live_app-Open_Drive_Triage-0b5cad?style=for-the-badge&labelColor=555b66&logo=googlechrome&logoColor=white"></a>
   <a href="https://github.com/russella02/Drive-Triage/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/russella02/Drive-Triage/test.yml?branch=main&style=for-the-badge&label=Tests&labelColor=555b66"></a>
+  <a href="https://github.com/russella02/Drive-Triage/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/russella02/Drive-Triage?style=for-the-badge&label=Version&labelColor=555b66&color=0b5cad"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/russella02/Drive-Triage?style=for-the-badge&labelColor=555b66&color=0b5cad"></a>
   <img alt="Runs in: Your browser" src="https://img.shields.io/badge/Runs_in-Your_browser-0b5cad?style=for-the-badge&labelColor=555b66">
   <img alt="Uploads: None" src="https://img.shields.io/badge/Uploads-None-0b5cad?style=for-the-badge&labelColor=555b66">
