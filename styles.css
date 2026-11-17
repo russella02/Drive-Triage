@@ -203,9 +203,38 @@ button { font: inherit; color: inherit; }
   border-right: 1px solid var(--line);
 }
 .rail-head {
-  padding: 16px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 10px 20px;
   border-bottom: 1px solid var(--line);
 }
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.sort select {
+  appearance: none;
+  padding: 4px 26px 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background-color: var(--ground);
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease);
+}
+.sort select:hover { border-color: var(--muted); }
+.sort select option { background: var(--ground); color: var(--ink); }
 .drive-list {
   flex: 1;
   overflow-y: auto;

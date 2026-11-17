@@ -35,7 +35,13 @@
 
 <div class="app" id="app">
   <nav class="rail" id="rail" aria-labelledby="rail-head" hidden>
-    <h2 class="sc rail-head" id="rail-head">Drives · worst first</h2>
+    <div class="rail-head">
+      <h2 class="sc" id="rail-head">Drives</h2>
+      <label class="sort">
+        <span class="sort-label">Sort</span>
+        <select id="sort"></select>
+      </label>
+    </div>
     <ul class="drive-list" id="drive-list" role="listbox" tabindex="0" aria-labelledby="rail-head"></ul>
   </nav>
   <main class="main" id="main" tabindex="-1">

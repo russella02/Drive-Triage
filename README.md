@@ -13,7 +13,7 @@ I had a pile of old hard drives and no quick way to tell which ones were still w
 
 You scan each drive with [GSmartControl](https://gsmartcontrol.shaduri.dev/) (smartctl) and save the report as JSON. Drive Triage reads those files, groups them by drive, and gives each drive a verdict: KEEP, WATCH or RETIRE. Each drive also gets a 0-100 health score and the reasons behind it, in plain English. It can print a 2" x 1" thermal label for each drive too.
 
-It's a single web page. Use it online or open it from disk. Either way there's nothing to install, no server to run and no database, and your scan files never leave your computer. The scan files are the history; the page only reads them. All the browser remembers is your folder and your theme choice.
+It's a single web page. Use it online or open it from disk. Either way there's nothing to install, no server to run and no database, and your scan files never leave your computer. The scan files are the history; the page only reads them. All the browser remembers is your folder, your theme and how you sort the list.
 
 ## Screenshots
 
@@ -48,7 +48,9 @@ Hard Drive Tests/
   WDC_WD1003FZEX-00MK2A0_WD-WCC3F1703205_2026-11-11_2030.json
 ```
 
-Scans with the same serial number and model count as one drive, wherever they sit. Each new scan adds to that drive's history. Anything that isn't a smartctl JSON scan is skipped and counted in the status line.
+Scans with the same serial number and model count as one drive, wherever they sit. Each new scan adds to that drive's history. The list shows the drives that need attention first. To change that, use the Sort menu above the list: best first, serial, model, capacity or last scanned. Your choice is remembered on this machine.
+
+Anything that isn't a smartctl JSON scan is skipped and counted in the status line.
 
 Only ATA/SATA drives are supported for now. NVMe and SAS scans show up as not supported yet.
 

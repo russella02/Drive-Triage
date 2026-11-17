@@ -562,15 +562,54 @@
     // groupDrives already keeps one scan per serial + model + time.
     const drives = groupDrives(scans).map((drive) => ({ drive, assessment: assessDrive(drive) }));
     const scanCount = drives.reduce((n, e) => n + e.drive.scans.length, 0);
-    const health = (e) => (e.assessment.health === null ? 101 : e.assessment.health);
-    drives.sort((a, b) =>
-      (VERDICT_ORDER[a.assessment.verdict] - VERDICT_ORDER[b.assessment.verdict])
-      || (health(a) - health(b))
-      || String(a.drive.name).localeCompare(String(b.drive.name), 'en', { numeric: true })
-      || (a.drive.key < b.drive.key ? -1 : a.drive.key > b.drive.key ? 1 : 0));
-    return { drives, scanCount, skipped };
+    return { drives: sortDrives(drives, DEFAULT_SORT), scanCount, skipped };
   }
 
-  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive, labelLines, analyzeFiles };
+  // ------------------------------------------------------------------ sortDrives
+  // entries: [{ drive, assessment }]. Returns a new array in the chosen order; ties fall back to
+  // serial (numbers in order), then key. An unknown mode sorts worst first.
+  const SORT_MODES = [
+    { id: 'worst', label: 'Worst first' },
+    { id: 'best', label: 'Best first' },
+    { id: 'name', label: 'Serial (A–Z)' },
+    { id: 'model', label: 'Model (A–Z)' },
+    { id: 'capacity', label: 'Capacity (largest)' },
+    { id: 'newest', label: 'Last scanned' }
+  ];
+  const DEFAULT_SORT = 'worst';
+  const BEST_ORDER = { keep: 0, watch: 1, retire: 2, unsupported: 3 };
+
+  function text(a, b) { return String(a || '').localeCompare(String(b || ''), 'en', { numeric: true, sensitivity: 'base' }); }
+  // Larger first; a missing number goes last.
+  function desc(a, b) {
+    const x = typeof a === 'number' ? a : null;
+    const y = typeof b === 'number' ? b : null;
+    if (x === y) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return y - x;
+  }
+  const lowHealth = (e) => (e.assessment.health === null ? 101 : e.assessment.health);
+  const highHealth = (e) => (e.assessment.health === null ? -1 : e.assessment.health);
+  const COMPARE = {
+    worst: (a, b) => (VERDICT_ORDER[a.assessment.verdict] - VERDICT_ORDER[b.assessment.verdict])
+      || (lowHealth(a) - lowHealth(b)),
+    best: (a, b) => (BEST_ORDER[a.assessment.verdict] - BEST_ORDER[b.assessment.verdict])
+      || (highHealth(b) - highHealth(a)),
+    name: () => 0,
+    model: (a, b) => text(a.drive.model, b.drive.model),
+    capacity: (a, b) => desc(a.drive.latest.capacityBytes, b.drive.latest.capacityBytes),
+    newest: (a, b) => desc(a.drive.latest.time, b.drive.latest.time)
+  };
+
+  function sortDrives(entries, mode) {
+    const cmp = COMPARE[mode] || COMPARE[DEFAULT_SORT];
+    return (entries || []).slice().sort((a, b) =>
+      cmp(a, b)
+      || text(a.drive.name, b.drive.name)
+      || (a.drive.key < b.drive.key ? -1 : a.drive.key > b.drive.key ? 1 : 0));
+  }
+
+  const api = { parseScan, attrCount, selfTestOutcome, formatCapacity, groupDrives, RULES, assessDrive, labelLines, analyzeFiles, SORT_MODES, DEFAULT_SORT, sortDrives };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else window.SmartAnalysis = api;
 })();

@@ -9,6 +9,7 @@
 const SA = window.SmartAnalysis;
 const R = SA.RULES;
 const THEME_KEY = 'drive-triage-theme';
+const SORT_KEY = 'drive-triage-sort';
 const DB_NAME = 'drive-triage';
 const DB_STORE = 'handles';
 const DB_KEY = 'root';
@@ -25,6 +26,7 @@ const ui = {
   printAll: document.getElementById('print-all'),
   rail: document.getElementById('rail'),
   list: document.getElementById('drive-list'),
+  sort: document.getElementById('sort'),
   main: document.getElementById('main'),
   input: document.getElementById('dir-input'),
   themeButtons: Array.from(document.querySelectorAll('[data-theme-choice]'))
@@ -36,7 +38,8 @@ const state = {
   skipped: 0,
   jsonCount: 0,
   selectedKey: null,
-  root: null,          // FileSystemDirectoryHandle in use
+  sort: SA.DEFAULT_SORT, // drive list order, one of SA.SORT_MODES
+  root: null,         // FileSystemDirectoryHandle in use
   savedHandle: null,   // handle remembered from a previous visit
   rootName: '',
   loading: false,
@@ -209,6 +212,29 @@ function applyTheme(pref) {
   ui.themeButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeChoice === pref)));
 }
 
+// ------------------------------------------------------------------------- sort
+function readSortPref() {
+  try {
+    const s = localStorage.getItem(SORT_KEY);
+    return SA.SORT_MODES.some((m) => m.id === s) ? s : SA.DEFAULT_SORT;
+  } catch (e) {
+    return SA.DEFAULT_SORT;
+  }
+}
+function saveSortPref(mode) {
+  try {
+    if (mode === SA.DEFAULT_SORT) localStorage.removeItem(SORT_KEY);
+    else localStorage.setItem(SORT_KEY, mode);
+  } catch (e) { /* storage blocked: the choice lasts for this visit only */ }
+}
+function setSort(mode) {
+  state.sort = mode;
+  ui.sort.value = mode;
+  if (!state.entries) return;
+  state.entries = SA.sortDrives(state.entries, mode);
+  renderLoaded();
+}
+
 // -------------------------------------------------------------------- IndexedDB
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -373,7 +399,7 @@ function ingest(files, unreadable) {
 
 function showResults(files, unreadable) {
   const res = SA.analyzeFiles(files);
-  state.entries = res.drives;
+  state.entries = SA.sortDrives(res.drives, state.sort);
   state.scanCount = res.scanCount;
   state.skipped = res.skipped + (unreadable || 0);
   state.jsonCount = files.length + (unreadable || 0);
@@ -1127,6 +1153,12 @@ async function init() {
   ui.printAll.addEventListener('click', () => printLabels((state.entries || []).filter((e) => e.assessment.verdict !== 'unsupported')));
   ui.input.addEventListener('change', () => readPickedFiles(ui.input.files));
   ui.list.addEventListener('keydown', onListKey);
+  ui.sort.replaceChildren(...SA.SORT_MODES.map((m) => h('option', { value: m.id, text: m.label })));
+  setSort(readSortPref());
+  ui.sort.addEventListener('change', () => {
+    saveSortPref(ui.sort.value);
+    setSort(ui.sort.value);
+  });
 
   if (!hasPicker) { renderIntro('first'); return; }
   const handle = await loadSavedHandle();
