@@ -19,11 +19,11 @@ It's a single web page. Use it online or open it from disk. Either way there's n
 
 Light theme:
 
-![Drive Triage in the light theme: a list of three real drives named by serial number, sorted worst first with the Sort menu above it, and the Seagate 9QM3N9GS selected, showing its WATCH verdict, health score 90, temperature curve, findings and limits](docs/images/drive-triage-light.png)
+![Drive Triage in the light theme: a list of three real drives named by serial number, sorted worst first with the Sort menu above it, and the Seagate 9QM3N9GS selected, showing its WATCH verdict, health score 90, temperature curve, findings and limits](docs/images/drive-triage-sort-light.png)
 
 Dark theme:
 
-![Drive Triage in the dark theme, showing the same three drives with 9QM3N9GS selected](docs/images/drive-triage-dark.png)
+![Drive Triage in the dark theme, showing the same three drives with 9QM3N9GS selected](docs/images/drive-triage-sort-dark.png)
 
 These are three real scans: a Seagate Barracuda 7200.11, a Toshiba DT01ACA050 and a WD Black.
 
